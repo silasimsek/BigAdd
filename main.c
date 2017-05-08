@@ -5,7 +5,6 @@
 int main() {
     char keywords[10][10] = {"int", "move", "add", "to", "sub", "from", "loop", "times", "out", "newline" };
     int keyword_count = 0, identifier_count = 0, parenthesis_count = 0, eol_count = 0;
-
     char filename[100];
     filename[0] = '\0';
 
@@ -42,50 +41,67 @@ int main() {
     char lexeme[100];
     int i = 0;
     int is_reading_comment = 0, is_reading_string = 0;
+
     while(1) {
         char c = (char)fgetc(source_code);
         if (c == EOF){
             break;
         }
-
         if(c == '{' && !is_reading_comment && !is_reading_string){ //don't count parenthesis in strings
             parenthesis_count++;
             is_reading_comment = 1;
+            continue;
         } else if (c == '}' && is_reading_comment && !is_reading_string) { //don't count parenthesis in strings
             parenthesis_count++;
             is_reading_comment = 0;
+            continue;
         }
 
         if(!is_reading_comment){ //we are not reading comment, lets check lexemes and errors
             if(c == '"'){ // WARNING: " “ ” are not same!! print(“str”) is not valid in C!!!
                 is_reading_string = !is_reading_string;
+                continue;
             }
             if(!is_reading_string) {
-                if(c == '[' || c == ']'){
-                    parenthesis_count++;
-                }
-                if(c != ' ' && c != '.' && c != '\t' && c != '\n'){
-                    lexeme[i++] = c;
-                } else {
-                    if (c == '.') {
-                        eol_count++;
+                if((c>=65 && c<=91) || (c>=97 && c<=123) || (c>=48 && c<=57) || (c>=44 && c<=46)
+                   || c==34 || c==93 || c==125 || c==32 || c==9 || c==10){
+                    if(c == '[' || c == ']'){
+                        parenthesis_count++;
+                        continue;
                     }
-                    lexeme[i] = '\0';
-                    for (int j = 0; j < 10; j++) {
-                        if(strcmp(lexeme, keywords[j]) == 0){
-                            keyword_count++;
-                            printf("%s is a keyword\n", lexeme);
+                    if(c!=' ' && c!='.' && c!='\t' && c!='\n' && c!=','){
+                        lexeme[i++] = c;
+                    } else {
+                        if (c == '.') {
+                            eol_count++;
                         }
+                        if (i != 0) {
+                            lexeme[i] = '\0';
+                            for (int j = 0; j < 10; j++) {
+                                if(strcmp(lexeme, keywords[j]) == 0){
+                                    keyword_count++;
+                                    printf("%s is a keyword\n", lexeme);
+                                    break;
+                                }
+                                if(j == 9 && lexeme != NULL && (lexeme[0]<48 || lexeme[0]>57)){
+                                    identifier_count++;
+                                    printf("%s, is a identifier\n", lexeme );
+                                }
+                            }
+                        }
+                        i = 0;
                     }
-                    // if it's not keyword its identifier
-                    i = 0;
+                }else{
+                    printf("Unexpected character: %c in line %d", c, eol_count);
+                    return -1;
                 }
             }
         }
     }
 
-    printf("New line count: %d\nKeyword count: %d\nParanthesis count: %d", eol_count, keyword_count, parenthesis_count);
-    fclose(source_code);
+    printf("New line count: %d\nKeyword count: %d\nParanthesis count: %d\nIdentifier count: %d ",
+           eol_count, keyword_count, parenthesis_count, identifier_count);
 
+    fclose(source_code);
     return 0;
 }
