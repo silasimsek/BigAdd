@@ -78,7 +78,7 @@ int main() {
 
             if(!is_reading_string) {
                 if((c>=65 && c<=91) || (c>=97 && c<=123) || (c>=48 && c<=57) || (c>=44 && c<=46)
-                   || c==34 || c==93 || c==125 || c==32 || c==9 || c==10){
+                   || c==93 || c==125 || c==32 || c==9 || c==10){
 
                     if(c == '['){
                         fputs("[ is a parenthesis\n", output_file);
@@ -102,11 +102,11 @@ int main() {
                                     fprintf(output_file, "%s is a keyword\n", lexeme);
                                     break;
                                 }
-                                if(j == 9 &&  (lexeme[0]<48 || lexeme[0]>57)){
+                                if(j == 9 &&  (lexeme[0]<48 || lexeme[0]>57) && lexeme[0] != '-'){
                                     identifier_count++;
-                                    fprintf(output_file, "%s is a identifier\n", lexeme);
+                                    fprintf(output_file, "%s is an identifier\n", lexeme);
                                     //printf("%s is a identifier\n", lexeme );
-                                }else if(j ==9 && lexeme[0]>=48 && lexeme[0]<=57){
+                                }else if((j ==9 && lexeme[0]>=48 && lexeme[0]<=57) || (j ==9 && lexeme[0]== '-')){
                                     fprintf(output_file, "%s is an integer\n", lexeme);
                                 }
                             }
@@ -120,7 +120,7 @@ int main() {
                         i = 0;
                     }
                 }else{
-                    printf("Unexpected character: %c in line %d", c, eol_count);
+                    printf("Unexpected character: %c in line %d", c, eol_count + 1);
                     return -1;
                 }
             }
