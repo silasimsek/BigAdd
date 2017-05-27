@@ -9,17 +9,6 @@
 #define max(a, b) ((a) > (b) ? (a) : (b)) //returns biggest
 #endif
 
-struct token;
-struct symbol;
-
-void printToken(struct token t);
-
-char *addDecimals(char *a, char *b);
-
-char *subDecimals(char *a, char *b);
-
-char *shiftstr(char *str, int n);
-
 struct token { //definition
     char *type; //identifier, keyword, integer, parenthesis, eol, comma, string
     char *value;
@@ -29,6 +18,25 @@ struct symbol {
     char *name;
     char *value;
 };
+
+void printToken(struct token t);
+
+char *addDecimals(char *a, char *b);
+
+char *subDecimals(char *a, char *b);
+
+char *shiftstr(char *str, int n);
+
+int error(char *expect, struct token t);
+
+int stop();
+
+char *getval(char *target); //gets the value of and identifier
+int updateval(char *target, char *new_val); // sets the value of and identifier
+int isSymbolExists(char *name);
+
+struct symbol symbol_table[100];
+int symbol_count = 0;
 
 int main() {
     char keywords[10][10] = {"int", "move", "add", "to", "sub", "from", "loop", "times", "out", "newline"};
@@ -97,14 +105,11 @@ int main() {
         if (!is_reading_comment) { //we are not reading comment, lets check lexemes and errors
             if (c == '"') { // WARNING: " “ ” are not same!! print(“str”) is not valid in C!!!
                 if (is_reading_string) { //this means we are at the end of a string
-                    lexeme[i++] = c;
                     lexeme[i] = '\0';
                     tokens[token_count].type = "string";
                     tokens[token_count].value = strdup(lexeme); //duplicate lexeme, we will change lexeme later
                     token_count++;
                     i = 0;
-                } else {
-                    lexeme[i++] = c;
                 }
                 is_reading_string = !is_reading_string;
                 continue;
@@ -143,7 +148,7 @@ int main() {
                                     break;
                                 }
                                 if (j == 9 && (lexeme[0] < 48 || lexeme[0] > 57) && lexeme[0] != '-') {//end of loop
-                                    tokens[token_count].type = "indentifier";
+                                    tokens[token_count].type = "identifier";
                                     tokens[token_count].value = strdup(lexeme);
                                     token_count++;
                                 } else if ((j == 9 && lexeme[0] >= 48 && lexeme[0] <= 57) ||
@@ -168,7 +173,7 @@ int main() {
                     }
                 } else {
                     printf("Unexpected character: %c in line %d", c, eol_count + 1);
-                    return -1;
+                    return stop();
                 }
             }
         }
@@ -180,18 +185,132 @@ int main() {
     for (int k = 0; k < token_count; k++) {
         printToken(tokens[k]);
     }
+    printf("\n");
 
-    struct symbol symbol_table[100];
-    int symbol_count = 0;
-    for (i = 0; i < token_count; ++i) {
+    int loop_left = 0, loop_start = 0;;
+    int state = 0; //0=new line, 1=declaration, 2=assignment, 3=add, 4=sub, 5=out, 6=loop
+    i = 0;
+    while (i < token_count) {
         if (strcmp(tokens[i].type, "keyword") == 0) {
             if (strcmp(tokens[i].value, "int") == 0) { //new integer declaration
-                symbol_table[symbol_count].name = tokens[++i].value;
+                i++;
+                if (strcmp(tokens[i].type, "identifier") != 0) {
+                    printf("Error: Unexpected %s %s. Expected identifier.", tokens[i].type, tokens[i].value);
+                    return error("Expected an identifier.", tokens[i]);
+                }
+                for (int j = 0; j < symbol_count; ++j) {
+                    if (strcmp(symbol_table[j].name, tokens[i].value) == 0) {
+                        printf("Error: %s is already defined before", tokens[i].value);
+                        return stop();
+                    }
+                }
+                symbol_table[symbol_count].name = tokens[i].value;
                 symbol_table[symbol_count].value = "0";
+                symbol_count++;
+                if (strcmp(tokens[i + 1].type, "eol") != 0) {
+                    return error("Expected an end of line character", tokens[i]);
+                }
+                i += 2; //nothing to do with eol
+            } else if (strcmp(tokens[i].value, "move") == 0) { //assignment, move S1 to S2
+                i++;
+                char *new_val;
+                if (strcmp(tokens[i].type, "identifier") == 0) { // S1 is identifier, lets find its value
+                    new_val = getval(tokens[i].value);
+                    if (strcmp(new_val, "not found") == 0) {
+                        printf("Error: %s is not declared before", tokens[i].value);
+                        return stop();
+                    }
+                    
+                } else if (strcmp(tokens[i].type, "integer") == 0) { //s1 is integer, we know its value
+                    new_val = tokens[i].value;
+                } else {
+                    return error("Expected identifier or integer", tokens[i]);
+                }
+
+                // now we got what to assign, now check where to assign
+                if (strcmp(tokens[i + 1].value, "to") != 0)
+                    return error("Expected 'to' keyword", tokens[i + 1]); // 'to' is required
+
+                if (strcmp(tokens[i + 2].type, "identifier") != 0)
+                    return error("Expected an identifier", tokens[i]); // we can assign values to only identifiers
+
+                int found = updateval(tokens[i + 2].value, new_val);
+                if (!found) {
+                    printf("Error: %s is not declared before", tokens[i + 2].value);
+                    return stop();
+                }
+                i += 4; // move x to y. we were on x "to", "y" "." skip these three too
+
+            } else if (strcmp(tokens[i].value, "add") == 0) { //addition
+                i++;
+                char *new_val;
+                if (strcmp(tokens[i].type, "identifier") == 0) {
+                    new_val = getval(tokens[i].value);
+                    if (strcmp(new_val, "not found") == 0) {
+                        printf("Error: %s is not declared before", tokens[i].value);
+                        return stop();
+                    }
+                } else if (strcmp(tokens[i].type, "integer") == 0) {
+                    new_val = tokens[i].value;
+                } else {
+                    return error("Expected integer or identifier", tokens[i]);
+                }
+                if (strcmp(tokens[i + 1].value, "to") != 0)
+                    return error("Expected 'to' keyword", tokens[i + 1]);
+
+                if (strcmp(tokens[i + 2].type, "identifier") != 0)
+                    return error("Expected an identifier", tokens[i + 2]);
+
+                char *old_val = getval(tokens[i + 2].value);
+                char *sum = addDecimals(old_val, new_val);
+                updateval(tokens[i + 2].value, sum);
+
+                i += 4; //add x to y. we were on x, skipped "to", "y" and "."
+                //dont forget to increase i !
+            } else if (strcmp(tokens[i].value, "sub") == 0) { //substraction
+                i++;
+
+
+                //dont forget to increase i !
+            } else if (strcmp(tokens[i].value, "out") == 0) { //output
+                i++;
+                while (1) { //print everything till end of line
+                    if (strcmp(tokens[i].type, "string") == 0) {
+                        printf(tokens[i].value);
+                        if (strcmp(tokens[i + 1].type, "eol") == 0) {
+                            i += 2; //skip eol
+                            break;
+                        }
+                    } else if (strcmp(tokens[i].type, "identifier") == 0) {
+                        for (int j = 0; j < symbol_count; ++j) {
+                            if (strcmp(symbol_table[j].name, tokens[i].value) == 0) {
+                                printf(symbol_table[j].value);
+                            }
+                        }
+                        if (strcmp(tokens[i + 1].type, "eol") == 0) {
+                            i += 2; //skip eol
+                            break;
+                        }
+                    } else //its not printable
+                        return error("Expected string or identifier", tokens[i]);
+
+                    if (strcmp(tokens[i + 1].type, "comma") != 0)
+                        return error("Expected comma", tokens[i + 1]);
+
+                    i += 2; //skipped comma
+                }
+                i++; //we were on end of line, check while loop condition
+            } else if (strcmp(tokens[i].value, "loop") == 0) { //loop
+
+
+                //dont forget to set i to loop start location
             }
         }
     }
 
+    printf("\n\nInterpreted succesfully! Press a key to exit...");
+    fseek(stdin, 0, SEEK_END); //clear input buffer //thanks to https://stackoverflow.com/a/9750394
+    getchar();
     return 0;
 }
 
@@ -200,6 +319,11 @@ void printToken(struct token t) {
 }
 
 char *addDecimals(char *a, char *b) {
+    if (strcmp(a, "0") == 0)
+        return b;
+    else if (strcmp(b, "0") == 0)
+        return a;
+
     int negative = 0;
     if (a[0] == '-' && b[0] != '-') { // -3 + 5 == 5 - 3
         a = shiftstr(a, -1); //remove negative sign by shifting one char left
@@ -380,4 +504,46 @@ char *shiftstr(char *str, int n) {
         return new_str;
     }
 
+}
+
+int error(char *expect, struct token t) {
+    printf("Error: Unexpected %s %s. %s", t.type, t.value, expect);
+    fseek(stdin, 0, SEEK_END);
+    getchar();
+    return -1;
+}
+
+int stop() {
+    fseek(stdin, 0, SEEK_END);
+    getchar();
+    return -1;
+}
+
+char *getval(char *target) {
+    for (int j = 0; j < symbol_count; ++j) {
+        if (strcmp(symbol_table[j].name, target) == 0) {
+            return symbol_table[j].value;
+        }
+    }
+    return "not found";
+
+}
+
+int updateval(char *target, char *new_val) {
+    for (int j = 0; j < symbol_count; ++j) {
+        if (strcmp(symbol_table[j].name, target) == 0) {
+            symbol_table[j].value = new_val;
+            return 1; //updated succesfully
+        }
+    }
+    return 0; //error
+}
+
+int isSymbolExists(char *name) {
+    for (int i = 0; i < symbol_count; ++i) {
+        if (strcmp(symbol_table[i].name, name)) {
+            return 1;
+        }
+    }
+    return 0;
 }
