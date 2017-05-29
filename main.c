@@ -21,9 +21,9 @@ struct symbol {
 
 void printToken(struct token t);
 
-char *addDecimals(char *a, char *b);
+char *add(char *a, char *b);
 
-char *subDecimals(char *a, char *b);
+char *sub(char *a, char *b);
 
 char *shiftstr(char *str, int n);
 
@@ -48,7 +48,7 @@ int main() {
 //    char *result;
 //    char *a = "-35";
 //    char *b = "100";
-//    result = addDecimals(a, b);
+//    result = add(a, b);
 //    printf("%s\n", result);
 
     while (1) { //loop until user enters a correct filename
@@ -255,15 +255,30 @@ int main() {
 
                 //target accepted! tokens[i + 2] is where to add
                 char *old_val = get(tokens[i + 2].value);
-                char *sum = addDecimals(old_val, new_val);
+                char *sum = add(old_val, new_val);
                 set(tokens[i + 2].value, sum);
 
                 i += 4; //add x to y. we were on x, skipped "to", "y" and "."
             } else if (strcmp(tokens[i].value, "sub") == 0) { //substraction
                 i++;
+                if (strcmp(tokens[i].type, "identifier") != 0 && strcmp(tokens[i].type, "integer") != 0)
+                    return error("Expected identifier or integer", tokens[i]);
 
+                char *new_val = valueof(tokens[i]);
 
-                //dont forget to increase i !
+                //we got what to sub. lets find where to
+                if (strcmp(tokens[i + 1].value, "from") != 0)
+                    return error("Expected 'from' keyword", tokens[i + 1]);
+
+                if (strcmp(tokens[i + 2].type, "identifier") != 0)
+                    return error("Expected an identifier", tokens[i + 2]); // we have to assign to a variable
+
+                //target accepted! tokens[i + 2] is where to add
+                char *old_val = get(tokens[i + 2].value);
+                char *answer = sub(old_val, new_val);
+                set(tokens[i + 2].value, answer);
+
+                i += 4; //sub x from y. we were on x, skipped "from", "y" and "."
             } else if (strcmp(tokens[i].value, "out") == 0) { //output
                 i++;
                 while (1) { //print everything till end of line
@@ -315,7 +330,7 @@ void printToken(struct token t) {
     printf("%s is a %s\n", t.value, t.type);
 }
 
-char *addDecimals(char *a, char *b) {
+char *add(char *a, char *b) {
     if (strcmp(a, "0") == 0)
         return b;
     else if (strcmp(b, "0") == 0)
@@ -324,14 +339,14 @@ char *addDecimals(char *a, char *b) {
     int negative = 0;
     if (a[0] == '-' && b[0] != '-') { // -3 + 5 == 5 - 3
         a = shiftstr(a, -1); //remove negative sign by shifting one char left
-        return subDecimals(b, a); //if a is negative, subtract a from b
+        return sub(b, a); //if a is negative, subtract a from b
     } else if (a[0] != '-' && b[0] == '-') { //3 + (-5) == 3 - 5
         char positive_b[MAX_DIGIT];
         for (int j = 0; j < strlen(b); j++) { // shift left by one character, we dont need '-'
             positive_b[j] = b[j + 1];
         }
         positive_b[strlen(b) - 1] = '\0';
-        return subDecimals(a, positive_b); //if b is negative, subtract b from a
+        return sub(a, positive_b); //if b is negative, subtract b from a
     } else if (a[0] == '-' && b[0] == '-')
         negative = 1; //if both are negative, answer will be negative
 
@@ -357,7 +372,7 @@ char *addDecimals(char *a, char *b) {
             x_ended = 1;
         }
 
-        if (y[i] > 57 || y[i] < 48) { //check if its not a number
+        if (y[i] > 57 || y[i] < 48) { //check if its not a number again
             y[i] = 48;
             y[i + 1] = '\0';
             y_ended = 1;
@@ -393,28 +408,28 @@ char *addDecimals(char *a, char *b) {
     return strdup(result);
 }
 
-char *subDecimals(char *a, char *b) {
+char *sub(char *a, char *b) {
     if (strcmp(a, b) == 0)
         return "0";
 
     int negative = 0;
     if (a[0] != '-' && b[0] == '-') { // +x - (-y) == x + y
         b = shiftstr(b, -1); // shift left by one character, we dont need '-'
-        return addDecimals(a, b); //"sub - from +" is equal to "add + to +"
+        return add(a, b); //"sub - from +" is equal to "add + to +"
     } else if (a[0] == '-' && b[0] != '-') { // -x - x = -x + (-x)
-        b = shiftstr(b, 1);
+        b = shiftstr(b, 1); // 54 -> 054, shift for adding a space for negative sign
         b[0] = '-';
-        return addDecimals(a, b); //if b is negative, subtract b from a
+        return add(a, b); //if b is negative, subtract b from a
     } else if (a[0] == '-' && b[0] == '-') {
         if (strlen(a) > strlen(b))
             negative = 1;
         else if (strlen(a) == strlen(b) && strcmp(a, b) > 0) { //-5 - (-3) = -2
             negative = 1;
         }
-
     } else if (strlen(b) > strlen(a)) //3 - 55 = -52
         negative = 1;
     else if (strlen(b) == strlen(a) && strcmp(b, a) > 0) { // 3 - 5 = -2
+        //do 5 - 3 first, then add a negative sign
         negative = 1;
         char *temp = b;
         b = a;
@@ -436,10 +451,10 @@ char *subDecimals(char *a, char *b) {
     strrev(y);
 
     //i is current digit number
-    int i = 0, x_ended = 0, y_ended = 0;
+    int i = 0, x_ended = 0, y_ended = 0; //
     while (1) {
         if (x[i] > 57 || x[i] < 48) {  //check if its not a number
-            x[i] = 48; //assign 0
+            x[i] = 48; //assign 0, it wont effect calculations
             x[i + 1] = '\0';
             x_ended = 1;
         }
@@ -474,6 +489,18 @@ char *subDecimals(char *a, char *b) {
     result[i] = '\0';
     strrev(result);
 
+    if (result[0]=='0' && strlen(result) > 1){
+        int zero_count = 0;
+        for (int j = 0; j < strlen(result); j++) { // count how many unwanted zeros at the beginning
+            if (result[j] == '0')
+                zero_count++;
+            else
+                break;
+        }
+        for (int j = 0; j < strlen(result); j++) { // remove zeros by shifting
+            result[j] = result[j + zero_count];
+        }
+    }
     if (negative) { // lets add '-' at the start of result
         for (int j = strlen(result); j > 0; j--) { // shift right by one character
             result[j] = result[j - 1];
@@ -481,14 +508,15 @@ char *subDecimals(char *a, char *b) {
         result[0] = '-';
         result[i + 1] = '\0'; //update end of string
     }
+
     return strdup(result);
 }
 
 char *shiftstr(char *str, int n) {
-    if (n < 0) { // shift right
+    if (n < 0) { // 05 -> 5 if n=-1 | 3456 -> 56 if n=-2
         str = str + abs(n);
         return str;
-    } else if (n > 0) {
+    } else if (n > 0) { // 4 -> 04 if n=1 | 23 -> 00023 if n=3
         char *new_str = malloc(sizeof(char) * (strlen(str) + n));
         for (int i = 0; i < strlen(str) + n; ++i) {
             if (i < n)
@@ -500,7 +528,6 @@ char *shiftstr(char *str, int n) {
         free(str);
         return new_str;
     }
-
 }
 
 int error(char *expect, struct token t) {
