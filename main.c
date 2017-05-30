@@ -12,6 +12,7 @@
 struct token { //definition
     char *type; //identifier, keyword, integer, parenthesis, eol, comma, string
     char *value;
+    int line;
 };
 
 struct symbol {
@@ -30,6 +31,7 @@ char *shiftstr(char *str, int n);
 int error(char *expect, struct token t);
 
 int stop();
+
 char *valueof(struct token target); //returns decimal value of a token. token can be identifier or integer
 char *get(char *target_name); //gets the value of and identifier
 int set(char *target_name, char *new_val); // sets the value of and identifier
@@ -40,7 +42,7 @@ int symbol_count = 0;
 
 int main() {
     char keywords[10][10] = {"int", "move", "add", "to", "sub", "from", "loop", "times", "out", "newline"};
-    int eol_count = 0;
+    int line_count = 1;
     char filename[100];
     filename[0] = '\0';
 
@@ -86,7 +88,7 @@ int main() {
     int token_count = 0;
 
     int i = 0;
-    int is_reading_comment = 0, is_reading_string = 0;
+    int is_reading_comment = 0, is_reading_string = 0, is_integer = 1;
     while (1) {
         char c = (char) fgetc(source_code); //read one char from source
         if (c == EOF) {
@@ -120,59 +122,75 @@ int main() {
 
             if (!is_reading_string) {
                 if ((c >= 65 && c <= 91) || (c >= 97 && c <= 123) || (c >= 48 && c <= 57) || (c >= 44 && c <= 46)
-                    || c == 93 || c == 125 || c == 32 || c == 9 || c == 10) {
-                    //accept A-Z a-z 0-9 , - . [] {} space \t \n characters in source code
+                    || c == 93 || c == 125 || c == 32 || c == 9 || c == 10 || c == 95) {
+                    //accept A-Z a-z 0-9 , - . [] {} space \t \n _ characters in source code
 
                     if (c == '[') {
                         tokens[token_count].type = "parenthesis";
                         tokens[token_count].value = "[";
+                        tokens[token_count].line = line_count;
                         token_count++;
                         continue;
                     } else if (c == ']') {
                         tokens[token_count].type = "parenthesis";
                         tokens[token_count].value = "]";
+                        tokens[token_count].line = line_count;
                         token_count++;
                         continue;
                     }
 
                     if (c != ' ' && c != '.' && c != '\t' && c != '\n' && c != ',') {
+                        if ((c < 48 && c != 45) || c > 57 ) // 45='-'
+                            is_integer = 0;
+
                         lexeme[i++] = c; //still reading a lexeme
                     } else {
                         if (i != 0) { //check if lexeme is not null/empty
                             lexeme[i] = '\0';
+                            int is_keyword = 0;
                             for (int j = 0; j < 10; j++) { //for loop that checks if lexeme is a keyword
                                 if (strcmp(lexeme, keywords[j]) == 0) { //string equality
                                     tokens[token_count].type = "keyword";
                                     tokens[token_count].value = strdup(lexeme);
+                                    tokens[token_count].line = line_count;
                                     token_count++;
+                                    is_keyword = 1;
                                     break;
                                 }
-                                if (j == 9 && (lexeme[0] < 48 || lexeme[0] > 57) && lexeme[0] != '-') {//end of loop
-                                    tokens[token_count].type = "identifier";
-                                    tokens[token_count].value = strdup(lexeme);
-                                    token_count++;
-                                } else if ((j == 9 && lexeme[0] >= 48 && lexeme[0] <= 57) ||
-                                           (j == 9 && lexeme[0] == '-')) {
+                            }
+
+                            if (!is_keyword) {
+                                 if (is_integer) {
                                     tokens[token_count].type = "integer";
                                     tokens[token_count].value = strdup(lexeme);
+                                    tokens[token_count].line = line_count;
+                                    token_count++;
+                                } else {
+                                    tokens[token_count].type = "identifier";
+                                    tokens[token_count].value = strdup(lexeme);
+                                    tokens[token_count].line = line_count;
                                     token_count++;
                                 }
                             }
                         }
                         if (c == '.') {
-                            eol_count++;
                             tokens[token_count].type = "eol";
                             tokens[token_count].value = "."; //not necessary, for printing purpose only
+                            tokens[token_count].line = line_count;
                             token_count++;
                         } else if (c == ',') {
                             tokens[token_count].type = "comma";
                             tokens[token_count].value = ","; //not necessary, for printing purpose only
+                            tokens[token_count].line = line_count;
                             token_count++;
+                        } else if (c == '\n'){
+                            line_count++;
                         }
                         i = 0;
+                        is_integer = 1;
                     }
                 } else {
-                    printf("Unexpected character: %c in line %d", c, eol_count + 1);
+                    printf("Unexpected character: %c in line %d", c, line_count + 1);
                     return stop();
                 }
             }
@@ -205,10 +223,16 @@ int main() {
                 i++;
                 if (strcmp(tokens[i].type, "identifier") != 0)
                     return error("Expected an identifier.", tokens[i]);
+
+                if (strstr(tokens[i].value, "-") != NULL) { //if identifier contains -
+                    printf("Error on line %d: %s is not valid variable name. "
+                                   "Only alphanumeric and underscores accepted",tokens[i].line, tokens[i].value );
+                    return stop();
+                }
                 
                 for (int j = 0; j < symbol_count; ++j) {
                     if (strcmp(symbol_table[j].name, tokens[i].value) == 0) {
-                        printf("Error: %s is already defined before", tokens[i].value);
+                        printf("Error on line %d: %s is already defined before", tokens[i].line, tokens[i].value);
                         return stop();
                     }
                 }
@@ -235,7 +259,7 @@ int main() {
 
                 int found = set(tokens[i + 2].value, new_val); //returns 0 if symbol not found
                 if (!found) {
-                    printf("Error: %s is not declared before", tokens[i + 2].value);
+                    printf("Error on line %d: %s is not declared before", tokens[i + 2].line, tokens[i + 2].value);
                     return stop();
                 }
                 i += 4; // move x to y. we were on x. skipped "to", "y" and "."
@@ -290,8 +314,8 @@ int main() {
                         }
                     } else if (strcmp(tokens[i].type, "identifier") == 0) {
                         char *value = valueof(tokens[i]);
-                        if (strcmp(value, "error") == 0){
-                            printf("Error: %s is not declared before", tokens[i].value);
+                        if (strcmp(value, "error") == 0) {
+                            printf("Error on line %d: %s is not declared before", tokens[i], tokens[i].value);
                             return stop();
                         }
                         printf(value);
@@ -341,12 +365,8 @@ char *add(char *a, char *b) {
         a = shiftstr(a, -1); //remove negative sign by shifting one char left
         return sub(b, a); //if a is negative, subtract a from b
     } else if (a[0] != '-' && b[0] == '-') { //3 + (-5) == 3 - 5
-        char positive_b[MAX_DIGIT];
-        for (int j = 0; j < strlen(b); j++) { // shift left by one character, we dont need '-'
-            positive_b[j] = b[j + 1];
-        }
-        positive_b[strlen(b) - 1] = '\0';
-        return sub(a, positive_b); //if b is negative, subtract b from a
+        b = shiftstr(b, -1);
+        return sub(a, b); //if b is negative, subtract b from a
     } else if (a[0] == '-' && b[0] == '-')
         negative = 1; //if both are negative, answer will be negative
 
@@ -473,7 +493,7 @@ char *sub(char *a, char *b) {
             result[i] = (char) (x[i] - y[i] + 48); // 48 is ascii of '0'
         } else {    // 3 - 5?
             int j = i + 1;
-            while (x[j] == '0') { // assign 9 to all zeros, 100000 - 1?
+            while (x[j] == '0') { // assign 9 to all zeros, 500000 - 1?
                 x[j] = '9';
                 j++;
             }
@@ -489,7 +509,7 @@ char *sub(char *a, char *b) {
     result[i] = '\0';
     strrev(result);
 
-    if (result[0]=='0' && strlen(result) > 1){
+    if (result[0] == '0' && strlen(result) > 1) {
         int zero_count = 0;
         for (int j = 0; j < strlen(result); j++) { // count how many unwanted zeros at the beginning
             if (result[j] == '0')
@@ -531,7 +551,7 @@ char *shiftstr(char *str, int n) {
 }
 
 int error(char *expect, struct token t) {
-    printf("Error: Unexpected %s %s. %s", t.type, t.value, expect);
+    printf("Error: Unexpected %s %s. %s on line %d", t.type, t.value, expect, t.line);
     fseek(stdin, 0, SEEK_END);
     getchar();
     return -1;
