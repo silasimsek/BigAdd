@@ -333,10 +333,40 @@ int main() {
                     i += 2; //skipped comma
                 }
                 i++; //we were on end of line, check while loop condition
-            } else if (strcmp(tokens[i].value, "loop") == 0) { //loop
+            } else if (strcmp(tokens[i].value, "loop") == 0) {
+               for(;;){
+            		i++;
+                	if (strcmp(tokens[i].type, "identifier") != 0 && strcmp(tokens[i].type, "integer") != 0)
+                    return error("Expected identifier or integer", tokens[i]);
+
+                		l_max =tokens[i].value;
+
+                		//So,guyss what we are expecting after identf or int? ofcourse---->'times' should be.
+                		if (strcmp(tokens[i + 1].value, "times") != 0)
+                    return error("Expected 'times' keyword", tokens[i + 1]);
+                    
+                    i+=2; // pass it 'times'
+                    if(strcmp(tokens[i].value,"[") != 0 && strcmp(tokens[i].value,"out") != 0)
+                    return error("Expected open paranthesis or 'out' keyword",tokens[i]);
+                    
+                    for(l_starts=0;0<l_max;l_starts++;){
+                    	i++;
+                    	while(strcmp(tokens[i].value,"]")!=0){
+                    		// su an loop un içindeki hataları kontrol etmesini istedim ama olmadı.
+							// buraya fonksyon mu gelir ne gelir bilmem..
+                    		if(strcmp(tokens[i].value, "loop") == 0){
+                    			continue; // umarım bunu yazınca loop a dönüyodu	
+							}
+							i++;
+							l_counts++;
+						}
+						                  	
+					}
+					l_level--; // end of the 'loop'
+
+            	}
 
 
-                //dont forget to set i to loop start location
             }
         } else {
             //every line of code must start with keyword.
