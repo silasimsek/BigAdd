@@ -213,21 +213,21 @@ int main() {
 
     //loop that validates code
     for (int l = 0; l < token_count ; l++) {
-        if(strcmp(tokens[i].type, "identifier") == 0){
-            if (strstr(tokens[i].value, "-") != NULL) { //if identifier contains -
+        if(strcmp(tokens[l].type, "identifier") == 0){
+            if (strstr(tokens[l].value, "-") != NULL) { //if identifier contains -
                 printf("Error on line %d: %s is not valid variable name. "
-                               "Only alphanumeric and underscores accepted", tokens[i].line, tokens[i].value );
+                               "Only alphanumeric and underscores accepted", tokens[l].line, tokens[l].value );
                 return stop();
             }
-        } else if(strcmp(tokens[i].type, "integer") == 0){
+        } else if(strcmp(tokens[l].type, "integer") == 0){
             int dash_count = 0;
-            char *temp = tokens[i].value;
+            char *temp = tokens[l].value;
             while(strstr(temp, "-") != NULL) {
                 dash_count++;
                 temp++;
             }
             if (dash_count > 1){
-                printf("Error on line %d: %s is not valid integer.", tokens[i].line, tokens[i].value );
+                printf("Error on line %d: %s is not valid integer.", tokens[l].line, tokens[l].value );
                 return stop();
             }
         }
