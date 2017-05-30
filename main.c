@@ -211,6 +211,28 @@ int main() {
     int l_level = -1; //loop level, -1 means we are not in loop
     i = 0;
 
+    //loop that validates code
+    for (int l = 0; l < token_count ; l++) {
+        if(strcmp(tokens[i].type, "identifier") == 0){
+            if (strstr(tokens[i].value, "-") != NULL) { //if identifier contains -
+                printf("Error on line %d: %s is not valid variable name. "
+                               "Only alphanumeric and underscores accepted", tokens[i].line, tokens[i].value );
+                return stop();
+            }
+        } else if(strcmp(tokens[i].type, "integer") == 0){
+            int dash_count = 0;
+            char *temp = tokens[i].value;
+            while(strstr(temp, "-") != NULL) {
+                dash_count++;
+                temp++;
+            }
+            if (dash_count > 1){
+                printf("Error on line %d: %s is not valid integer.", tokens[i].line, tokens[i].value );
+                return stop();
+            }
+        }
+    }
+
     //loop in tokens array. whole loop can be counted as parser
     // used tokens[i + 1] or tokens[i + 2] for checking syntax
     // for ex: "move 5 to x." when we are on '5' token, checked next token if its 'to'.
@@ -224,18 +246,12 @@ int main() {
                 if (strcmp(tokens[i].type, "identifier") != 0)
                     return error("Expected an identifier.", tokens[i]);
 
-                if (strstr(tokens[i].value, "-") != NULL) { //if identifier contains -
-                    printf("Error on line %d: %s is not valid variable name. "
-                                   "Only alphanumeric and underscores accepted",tokens[i].line, tokens[i].value );
+                //get() will return "not declared" if its not declared
+                if ( strcmp(get(tokens[i].value), "not declared") != 0){
+                    printf("Error on line %d: %s is already declared before", tokens[i].line, tokens[i].value);
                     return stop();
                 }
-                
-                for (int j = 0; j < symbol_count; ++j) {
-                    if (strcmp(symbol_table[j].name, tokens[i].value) == 0) {
-                        printf("Error on line %d: %s is already defined before", tokens[i].line, tokens[i].value);
-                        return stop();
-                    }
-                }
+
                 symbol_table[symbol_count].name = tokens[i].value;
                 symbol_table[symbol_count].value = "0";
                 symbol_count++;
@@ -249,6 +265,10 @@ int main() {
                     return error("Expected identifier or integer", tokens[i]);
 
                 char *new_val = valueof(tokens[i]);
+                if (strcmp(new_val, "not declared") == 0) {
+                    printf("Error on line %d: %s is not declared before", tokens[i], tokens[i].value);
+                    return stop();
+                }
 
                 // now we got what to assign, now check where to assign
                 if (strcmp(tokens[i + 1].value, "to") != 0)
@@ -269,7 +289,10 @@ int main() {
                     return error("Expected identifier or integer", tokens[i]);
 
                 char *new_val = valueof(tokens[i]);
-
+                if (strcmp(new_val, "not declared") == 0) {
+                    printf("Error on line %d: %s is not declared before", tokens[i], tokens[i].value);
+                    return stop();
+                }
                 //again we got what to add. lets find where to add
                 if (strcmp(tokens[i + 1].value, "to") != 0)
                     return error("Expected 'to' keyword", tokens[i + 1]);
@@ -279,6 +302,10 @@ int main() {
 
                 //target accepted! tokens[i + 2] is where to add
                 char *old_val = get(tokens[i + 2].value);
+                if (strcmp(old_val, "not declared") == 0) {
+                    printf("Error on line %d: %s is not declared before", tokens[i], tokens[i].value);
+                    return stop();
+                }
                 char *sum = add(old_val, new_val);
                 set(tokens[i + 2].value, sum);
 
@@ -289,6 +316,10 @@ int main() {
                     return error("Expected identifier or integer", tokens[i]);
 
                 char *new_val = valueof(tokens[i]);
+                if (strcmp(new_val, "not declared") == 0) {
+                    printf("Error on line %d: %s is not declared before", tokens[i], tokens[i].value);
+                    return stop();
+                }
 
                 //we got what to sub. lets find where to
                 if (strcmp(tokens[i + 1].value, "from") != 0)
@@ -299,6 +330,10 @@ int main() {
 
                 //target accepted! tokens[i + 2] is where to add
                 char *old_val = get(tokens[i + 2].value);
+                if (strcmp(old_val, "not declared") == 0) {
+                    printf("Error on line %d: %s is not declared before", tokens[i], tokens[i].value);
+                    return stop();
+                }
                 char *answer = sub(old_val, new_val);
                 set(tokens[i + 2].value, answer);
 
@@ -314,7 +349,7 @@ int main() {
                         }
                     } else if (strcmp(tokens[i].type, "identifier") == 0) {
                         char *value = valueof(tokens[i]);
-                        if (strcmp(value, "error") == 0) {
+                        if (strcmp(value, "not declared") == 0) {
                             printf("Error on line %d: %s is not declared before", tokens[i], tokens[i].value);
                             return stop();
                         }
@@ -608,7 +643,7 @@ char *get(char *target_name) { //gets value of an identifier
             return symbol_table[j].value;
         }
     }
-    return "error";
+    return "not declared";
 }
 
 int set(char *target_name, char *new_val) { //sets value of an identifier
