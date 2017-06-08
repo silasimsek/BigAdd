@@ -311,6 +311,9 @@ int main() {
                     printf("Error on line %d: %s is not declared before", tokens[i + 2].line, tokens[i + 2].value);
                     return stop();
                 }
+                if (strcmp(tokens[i + 3].type, "eol") != 0)
+                    return error("Expected an end of line character", tokens[i + 3]);
+
                 i += 4; // move x to y. we were on x. skipped "to", "y" and "."
             } else if (strcmp(tokens[i].value, "add") == 0) { //addition
                 i++;
@@ -337,6 +340,9 @@ int main() {
                 }
                 char *sum = add(old_val, new_val);
                 set(tokens[i + 2].value, sum);
+
+                if (strcmp(tokens[i + 3].type, "eol") != 0)
+                    return error("Expected an end of line character", tokens[i + 3]);
 
                 i += 4; //add x to y. we were on x, skipped "to", "y" and "."
             } else if (strcmp(tokens[i].value, "sub") == 0) { //substraction
@@ -365,6 +371,9 @@ int main() {
                 }
                 char *answer = sub(old_val, new_val);
                 set(tokens[i + 2].value, answer);
+
+                if (strcmp(tokens[i + 3].type, "eol") != 0)
+                    return error("Expected an end of line character", tokens[i + 3]);
 
                 i += 4; //sub x from y. we were on x, skipped "from", "y" and "."
             } else if (strcmp(tokens[i].value, "out") == 0) { //output
@@ -654,7 +663,8 @@ char *shiftstr(char *str, int n) {
 }
 
 int error(char *expect, struct token t) {
-    printf("Error: Unexpected %s %s. %s on line %d", t.type, t.value, expect, t.line);
+    system("cls");
+    printf("Error: Unexpected %s '%s'. %s on line %d", t.type, t.value, expect, t.line);
     fseek(stdin, 0, SEEK_END);
     getchar();
     return -1;
