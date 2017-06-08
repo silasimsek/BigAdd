@@ -2,6 +2,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <stdbool.h> //Requires C99 standard!
 
 #define MAX_DIGIT 100
 
@@ -104,6 +105,9 @@ int main() {
             continue;
         }
 
+        if (c == '\n'){
+            line_count++;
+        }
         if (!is_reading_comment) { //we are not reading comment, lets check lexemes and errors
             if (c == '"') { // WARNING: " “ ” are not same!! print(“str”) is not valid in C!!!
                 if (is_reading_string) { //this means we are at the end of a string
@@ -140,7 +144,7 @@ int main() {
                     }
 
                     if (c != ' ' && c != '.' && c != '\t' && c != '\n' && c != ',') {
-                        if ((c < 48 && c != 45) || c > 57 ) // 45='-'
+                        if ((c < 48 && c != 45) || c > 57) // 45='-'
                             is_integer = 0;
 
                         lexeme[i++] = c; //still reading a lexeme
@@ -160,7 +164,7 @@ int main() {
                             }
 
                             if (!is_keyword) {
-                                 if (is_integer) {
+                                if (is_integer) {
                                     tokens[token_count].type = "integer";
                                     tokens[token_count].value = strdup(lexeme);
                                     tokens[token_count].line = line_count;
@@ -183,8 +187,6 @@ int main() {
                             tokens[token_count].value = ","; //not necessary, for printing purpose only
                             tokens[token_count].line = line_count;
                             token_count++;
-                        } else if (c == '\n'){
-                            line_count++;
                         }
                         i = 0;
                         is_integer = 1;
@@ -199,16 +201,11 @@ int main() {
     fclose(source_code); //we are done with source file
     //now we got tokens[] array from lexical analyzer
 
-    //testing purpose only
-    for (int k = 0; k < token_count; k++) {
-        printToken(tokens[k]);
-    }
-    printf("\n");
-
     int l_max[100] = {0}; //max loop. how many times we need to loop?
     int l_counts[100] = {0}; //counter. how many times did we looped?
     int l_starts[100] = {0}; //loop starting points
     int l_level = -1; //loop level, -1 means we are not in loop
+    bool l_block[100] = {false}; //'true' if loop has code block, 'false' if it has one line code
     i = 0;
 
     //loop that validates code
@@ -234,13 +231,14 @@ int main() {
     }
 
     //loop in tokens array. whole loop can be counted as parser
+    //it interprets one line of code in every iteration!
     // used tokens[i + 1] or tokens[i + 2] for checking syntax
     // for ex: "move 5 to x." when we are on '5' token, checked next token if its 'to'.
     // then increase i by 2. because we wont do anything with 'to' token.
     while (i < token_count) {
         //start of loop is start of line of code.
         // so everytime we reach here we have to check what type of line of code are we going to read
-        if (strcmp(tokens[i].type, "keyword") == 0) {
+        if (strcmp(tokens[i].type, "keyword") == 0 || strcmp(tokens[i].value, "]") == 0) {
             if (strcmp(tokens[i].value, "int") == 0) { //new integer declaration -> int x.
                 i++;
                 if (strcmp(tokens[i].type, "identifier") != 0)
@@ -343,10 +341,6 @@ int main() {
                 while (1) { //print everything till end of line
                     if (strcmp(tokens[i].type, "string") == 0) {
                         printf(tokens[i].value);
-                        if (strcmp(tokens[i + 1].type, "eol") == 0) {
-                            i += 2; //skip eol
-                            break;
-                        }
                     } else if (strcmp(tokens[i].type, "identifier") == 0) {
                         char *value = valueof(tokens[i]);
                         if (strcmp(value, "not declared") == 0) {
@@ -354,55 +348,68 @@ int main() {
                             return stop();
                         }
                         printf(value);
-                        if (strcmp(tokens[i + 1].type, "eol") == 0) {
-                            i += 2; //skip eol
-                            break;
-                        }
+                    } else if (strcmp(tokens[i].value, "newline") == 0) {
+                        printf("\n");
                     } else //its not printable
-                        return error("Expected string or identifier", tokens[i]);
+                        return error("Expected string, identifier or 'newline' keyword", tokens[i]);
+
+                    i++;
+                    if (strcmp(tokens[i].type, "eol") == 0)
+                        break;
 
                     //if we reached here, we will continue printing. check if theres a comma
-                    if (strcmp(tokens[i + 1].type, "comma") != 0)
-                        return error("Expected comma", tokens[i + 1]);
+                    if (strcmp(tokens[i].type, "comma") != 0)
+                        return error("Expected comma", tokens[i]);
 
-                    i += 2; //skipped comma
+                    i++; //skipped comma
                 }
                 i++; //we were on end of line, check while loop condition
             } else if (strcmp(tokens[i].value, "loop") == 0) {
-               for(;;){
-            		i++;
-                	if (strcmp(tokens[i].type, "identifier") != 0 && strcmp(tokens[i].type, "integer") != 0)
+                i++;
+                if (strcmp(tokens[i].type, "identifier") != 0 && strcmp(tokens[i].type, "integer") != 0)
                     return error("Expected identifier or integer", tokens[i]);
 
-                		l_max =tokens[i].value;
+                l_level++;
+                l_max[l_level] = atoi(valueof(tokens[i])); //should we allow loops more than 2147483647? I don't think so
 
-                		//So,guyss what we are expecting after identf or int? ofcourse---->'times' should be.
-                		if (strcmp(tokens[i + 1].value, "times") != 0)
+                //So,guyss what we are expecting after identf or int? of course---->'times' should be.
+                if (strcmp(tokens[i + 1].value, "times") != 0)
                     return error("Expected 'times' keyword", tokens[i + 1]);
-                    
-                    i+=2; // pass it 'times'
-                    if(strcmp(tokens[i].value,"[") != 0 && strcmp(tokens[i].value,"out") != 0)
-                    return error("Expected open paranthesis or 'out' keyword",tokens[i]);
-                    
-                    for(l_starts=0;0<l_max;l_starts++;){
-                    	i++;
-                    	while(strcmp(tokens[i].value,"]")!=0){
-                    		// su an loop un içindeki hataları kontrol etmesini istedim ama olmadı.
-							// buraya fonksyon mu gelir ne gelir bilmem..
-                    		if(strcmp(tokens[i].value, "loop") == 0){
-                    			continue; // umarım bunu yazınca loop a dönüyodu	
-							}
-							i++;
-							l_counts++;
-						}
-						                  	
-					}
-					l_level--; // end of the 'loop'
 
-            	}
+                i += 2; // pass 'times' keyword
+                if (strcmp(tokens[i].value, "[") == 0){
+                    i++; // nothing to do with '['
+                    l_block[l_level] = true;
+                } else if (strcmp(tokens[i].type, "keyword") != 0)
+                    return error("Expected open paranthesis or a keyword", tokens[i]);
 
-
+                l_starts[l_level] = i;
+                l_counts[l_level] = 0;
+                continue;
             }
+
+            //interpreted a line of code, lets check if it was in loop
+            if (l_level >= 0){
+                if (l_block[l_level]){ // we are in loop block
+                    if (strcmp(tokens[i].value, "]") == 0) {
+                        i++; //if its last iteration of loop, it will continue from next line
+                    } else {
+                        // we are going to interpret atlease one line in current loop
+                        continue; //lets go to the next line of code
+                    }
+                }
+
+                l_counts[l_level]++;
+                if (l_counts[l_level] == l_max[l_level]){
+                    l_counts[l_level] = 0; // reset values just in case
+                    l_max[l_level] = 0;
+                    l_starts[l_level] = 0;
+                    l_level--;
+                } else {
+                    i = l_starts[l_level]; // go back to start of that loop
+                }
+            }
+
         } else {
             //every line of code must start with keyword.
             return error("Keyword expected", tokens[i]);
