@@ -5,6 +5,7 @@
 #include <stdbool.h> //Requires C99 standard!
 
 #define MAX_DIGIT 100
+#define INITIAL_MAX 10
 
 #ifndef max
 #define max(a, b) ((a) > (b) ? (a) : (b)) //returns biggest
@@ -21,7 +22,15 @@ struct symbol {
     char *value;
 };
 
-void printToken(struct token t);
+struct stack {
+    int max;
+    char *elements;
+    int top;
+};
+
+char pop(struct stack *st);
+
+void push(struct stack *st, char c);
 
 char *add(char *a, char *b);
 
@@ -201,12 +210,11 @@ int main() {
     fclose(source_code); //we are done with source file
     //now we got tokens[] array from lexical analyzer
 
-    int l_max[100] = {0}; //max loop. how many times we need to loop?
-    int l_counts[100] = {0}; //counter. how many times did we looped?
-    int l_starts[100] = {0}; //loop starting points
-    int l_level = -1; //loop level, -1 means we are not in loop
-    bool l_block[100] = {false}; //'true' if loop has code block, 'false' if it has one line code
-    i = 0;
+    struct stack p_stack;
+    p_stack.max = INITIAL_MAX;
+    p_stack.elements = NULL;
+    p_stack.top = -1;
+    int open_count = 0, close_count = 0, last_open = 0;
 
     //loop that validates code
     for (int l = 0; l < token_count ; l++) {
@@ -227,8 +235,31 @@ int main() {
                 printf("Error on line %d: %s is not valid integer.", tokens[l].line, tokens[l].value );
                 return stop();
             }
+        } else if(strcmp(tokens[l].type, "parenthesis") == 0){
+            if (strcmp(tokens[l].value, "[") == 0){
+                push(&p_stack,'[');
+                open_count++;
+                last_open = l;
+            } else if (strcmp(tokens[l].value, "]") == 0){
+                char temp = pop(&p_stack);
+                if (temp != '[')
+                    return error("Expected open parenthesis before using a close parenthesis ", tokens[l]);
+                close_count++;
+            }
         }
     }
+    if (open_count != close_count){
+        printf("Error: Expected a close parenthesis before end of file. Last open parenthesis is on line %d"
+                ,tokens[last_open].line);
+        return stop();
+    }
+
+    int l_max[100] = {0}; //max loop. how many times we need to loop?
+    int l_counts[100] = {0}; //counter. how many times did we looped?
+    int l_starts[100] = {0}; //loop starting points
+    int l_level = -1; //loop level, -1 means we are not in loop
+    bool l_block[100] = {false}; //'true' if loop has code block, 'false' if it has one line code
+    i = 0;
 
     //loop in tokens array. whole loop can be counted as parser
     //it interprets one line of code in every iteration!
@@ -663,6 +694,36 @@ int set(char *target_name, char *new_val) { //sets value of an identifier
     return 0; //error
 }
 
+void push(struct stack *st, char c) {
+    if (st->elements == NULL) { //lets allocate some space
+        st->elements = malloc(INITIAL_MAX * sizeof(char));
+    } else if (st->top == st->max -1){ //its full, lets reallocate some more space
+        st->max *= 2; //double the capacity
+        char *more_elements = realloc(st->elements, st->max * sizeof(char));
+        st->elements = more_elements;
+    }
+    st->top++;
+    st->elements[st->top] = c;
+}
+
+char pop(struct stack *st) {
+    if ((st->max / 2) > (st->top + 10)){ //more than half of it is empty
+        st->max /= 2;
+        char *less_elements = malloc(st->max * sizeof(char));
+        free(st->elements);
+        st->elements = less_elements;
+    }
+    if (st->top == -1) {
+        //stack is empty, return null
+        return '\0';
+    } else {
+        char c = st->elements[st->top];
+        st->elements[st->top] = '\0'; // for debugging purpose only
+        st->top--;
+        return c;
+    }
+}
+
 int isSymbolExists(char *target_name) {
     for (int i = 0; i < symbol_count; ++i) {
         if (strcmp(symbol_table[i].name, target_name)) {
@@ -671,3 +732,5 @@ int isSymbolExists(char *target_name) {
     }
     return 0;
 }
+
+
