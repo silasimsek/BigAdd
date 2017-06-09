@@ -15,6 +15,7 @@ struct token { //definition
     char *type; //identifier, keyword, integer, parenthesis, eol, comma, string
     char *value;
     int line;
+    int column;
 };
 
 struct symbol {
@@ -38,7 +39,7 @@ char *sub(char *a, char *b);
 
 char *shiftstr(char *str, int n);
 
-int error(char *expect, struct token t);
+int error(int type, char *info, struct token t);
 
 int stop();
 
@@ -86,17 +87,18 @@ int main() {
     }
 
     FILE *source_code = fopen(filename, "r"); //lexical analysis output
-    char lexeme[MAX_DIGIT + 1]; //temporary char array for each lexeme
+    char lexeme[105]; //temporary char array for each lexeme
     struct token tokens[1000];
     int token_count = 0;
 
-    int i = 0;
+    int i = 0, col = 0, start_column = 0;
     int is_reading_comment = 0, is_reading_string = 0, is_integer = 1;
     while (1) {
         char c = (char) fgetc(source_code); //read one char from source
         if (c == EOF) {
             break;
         }
+
         if (c == '{' && !is_reading_comment && !is_reading_string) { //don't count parenthesis in strings
             //fputs("{ is a parenthesis\n", output_file);
             is_reading_comment = 1;
@@ -107,9 +109,15 @@ int main() {
             continue;
         }
 
+        col++;
+        if (i == 0){ //its first character of a lexeme
+            start_column = col;
+        }
         if (c == '\n'){
+            col = 0;
             line_count++;
         }
+
         if (!is_reading_comment) { //we are not reading comment, lets check lexemes and errors
             if (c == '"') { // WARNING: " “ ” are not same!! print(“str”) is not valid in C!!!
                 if (is_reading_string) { //this means we are at the end of a string
@@ -135,12 +143,14 @@ int main() {
                         tokens[token_count].type = "parenthesis";
                         tokens[token_count].value = "[";
                         tokens[token_count].line = line_count;
+                        tokens[token_count].column = start_column;
                         token_count++;
                         continue;
                     } else if (c == ']') {
                         tokens[token_count].type = "parenthesis";
                         tokens[token_count].value = "]";
                         tokens[token_count].line = line_count;
+                        tokens[token_count].column = start_column;
                         token_count++;
                         continue;
                     }
@@ -159,6 +169,7 @@ int main() {
                                     tokens[token_count].type = "keyword";
                                     tokens[token_count].value = strdup(lexeme);
                                     tokens[token_count].line = line_count;
+                                    tokens[token_count].column = start_column;
                                     token_count++;
                                     is_keyword = 1;
                                     break;
@@ -170,11 +181,13 @@ int main() {
                                     tokens[token_count].type = "integer";
                                     tokens[token_count].value = strdup(lexeme);
                                     tokens[token_count].line = line_count;
+                                    tokens[token_count].column = start_column;
                                     token_count++;
                                 } else {
                                     tokens[token_count].type = "identifier";
                                     tokens[token_count].value = strdup(lexeme);
                                     tokens[token_count].line = line_count;
+                                    tokens[token_count].column = start_column;
                                     token_count++;
                                 }
                             }
@@ -183,18 +196,20 @@ int main() {
                             tokens[token_count].type = "eol";
                             tokens[token_count].value = "."; //not necessary, for printing purpose only
                             tokens[token_count].line = line_count;
+                            tokens[token_count].column = start_column;
                             token_count++;
                         } else if (c == ',') {
                             tokens[token_count].type = "comma";
                             tokens[token_count].value = ","; //not necessary, for printing purpose only
                             tokens[token_count].line = line_count;
+                            tokens[token_count].column = start_column;
                             token_count++;
                         }
                         i = 0;
                         is_integer = 1;
                     }
                 } else {
-                    printf("Unexpected character: %c in line %d", c, line_count + 1);
+                    printf("Unexpected character: %c in line %d, column %d", c, line_count, col);
                     return stop();
                 }
             }
@@ -212,22 +227,31 @@ int main() {
     //loop that validates code
     for (int l = 0; l < token_count ; l++) {
         if(strcmp(tokens[l].type, "identifier") == 0){
-            if (strstr(tokens[l].value, "-") != NULL) { //if identifier contains -
-                printf("Error on line %d: %s is not valid variable name. "
-                               "Only alphanumeric and underscores accepted", tokens[l].line, tokens[l].value );
-                return stop();
-            }
+            if (strlen(tokens[l].value) > 20)
+                return error(7, NULL, tokens[l]); //max identifier name lenght exceeded
+
+            if (strstr(tokens[l].value, "-") != NULL) //if identifier contains -
+                return error(5, NULL, tokens[l]);// not valid identifier
+
         } else if(strcmp(tokens[l].type, "integer") == 0){
+            int digit_limit;
+            if (strstr(tokens[l].value, "-") != NULL) //if its a negative integer
+                digit_limit = MAX_DIGIT + 1;
+            else
+                digit_limit = MAX_DIGIT;
+
+            if (strlen(tokens[l].value) > digit_limit)
+                return error(4, NULL, tokens[l]); //Max digit limit exceeded
+
             int dash_count = 0;
             char *temp = tokens[l].value;
             while(strstr(temp, "-") != NULL) {
                 dash_count++;
                 temp++;
             }
-            if (dash_count > 1){
-                printf("Error on line %d: %s is not valid integer.", tokens[l].line, tokens[l].value );
-                return stop();
-            }
+            if (dash_count > 1)
+                return error(6, NULL, tokens[l]); //not valid integer
+
         } else if(strcmp(tokens[l].type, "parenthesis") == 0){
             if (strcmp(tokens[l].value, "[") == 0){
                 push(&p_stack,'[');
@@ -236,7 +260,7 @@ int main() {
             } else if (strcmp(tokens[l].value, "]") == 0){
                 char temp = pop(&p_stack);
                 if (temp != '[')
-                    return error("Expected open parenthesis before using a close parenthesis ", tokens[l]);
+                    return error(1, "Expected open parenthesis before using a close parenthesis ", tokens[l]);
                 close_count++;
             }
         }
@@ -252,6 +276,7 @@ int main() {
     int l_starts[100] = {0}; //loop starting points
     int l_level = -1; //loop level, -1 means we are not in loop
     bool l_block[100] = {false}; //'true' if loop has code block, 'false' if it has one line code
+    // included <stdbool.h> for this
     i = 0;
 
     //loop in tokens array. whole loop can be counted as parser
@@ -266,17 +291,15 @@ int main() {
             if (strcmp(tokens[i].value, "int") == 0) { //new integer declaration -> int x.
                 i++;
                 if (strcmp(tokens[i].type, "identifier") != 0)
-                    return error("Expected an identifier.", tokens[i]);
+                    return error(1, "Expected an identifier.", tokens[i]);
 
                 if (strcmp(tokens[i + 1].type, "eol") != 0)
-                    return error("Expected an end of line character", tokens[i + 1]);
+                    return error(1, "Expected an end of line character", tokens[i + 1]);
                 //declaration syntax is correct
 
                 //get() will return "not declared" if its not declared
-                if ( strcmp(get(tokens[i].value), "not declared") != 0){
-                    printf("Error on line %d: %s is already declared before", tokens[i].line, tokens[i].value);
-                    return stop();
-                }
+                if ( strcmp(get(tokens[i].value), "not declared") != 0)
+                    return error(3, NULL, tokens[i]);
 
                 symbol_table[symbol_count].name = tokens[i].value;
                 symbol_table[symbol_count].value = "0";
@@ -287,89 +310,87 @@ int main() {
             } else if (strcmp(tokens[i].value, "move") == 0) { //assignment -> move y to x. or move 5 to x.
                 i++;
                 if (strcmp(tokens[i].type, "identifier") != 0 && strcmp(tokens[i].type, "integer") != 0)
-                    return error("Expected identifier or integer", tokens[i]);
+                    return error(1, "Expected identifier or integer", tokens[i]);
 
                 if (strcmp(tokens[i + 1].value, "to") != 0)
-                    return error("Expected 'to' keyword", tokens[i + 1]); // 'to' is required
+                    return error(1, "Expected keyword 'to'", tokens[i + 1]); // 'to' is required
 
                 if (strcmp(tokens[i + 2].type, "identifier") != 0)
-                    return error("Expected an identifier", tokens[i]); // we can assign values to only identifiers
+                    return error(1, "Expected an identifier", tokens[i]); // we can assign values to only identifiers
 
                 if (strcmp(tokens[i + 3].type, "eol") != 0)
-                    return error("Expected an end of line character", tokens[i + 3]);
+                    return error(1, "Expected an end of line character", tokens[i + 3]);
                 //assignment syntax is correct
 
                 char *new_val = valueof(tokens[i]);
-                if (strcmp(new_val, "not declared") == 0) {
-                    printf("Error on line %d: %s is not declared before", tokens[i].line, tokens[i].value);
-                    return stop();
-                }
+                if (strcmp(new_val, "not declared") == 0)
+                    return error(2, NULL, tokens[i]);
+
 
                 int found = set(tokens[i + 2].value, new_val); //returns 0 if symbol not found
-                if (!found) {
-                    printf("Error on line %d: %s is not declared before", tokens[i + 2].line, tokens[i + 2].value);
-                    return stop();
-                }
+                if (!found)
+                    return error(2, NULL, tokens[i + 2]);
 
                 i += 4; // move x to y. we were on x. skipped "to", "y" and "."
             } else if (strcmp(tokens[i].value, "add") == 0) { //addition
                 i++;
                 if (strcmp(tokens[i].type, "identifier") != 0 && strcmp(tokens[i].type, "integer") != 0)
-                    return error("Expected identifier or integer", tokens[i]);
+                    return error(1, "Expected identifier or integer", tokens[i]);
 
                 if (strcmp(tokens[i + 1].value, "to") != 0)
-                    return error("Expected 'to' keyword", tokens[i + 1]);
+                    return error(1, "Expected keyword 'to'", tokens[i + 1]);
 
                 if (strcmp(tokens[i + 2].type, "identifier") != 0)
-                    return error("Expected an identifier", tokens[i + 2]); // we have to assign to a variable
+                    return error(1, "Expected an identifier", tokens[i + 2]); // we have to assign to a variable
 
                 if (strcmp(tokens[i + 3].type, "eol") != 0)
-                    return error("Expected an end of line character", tokens[i + 3]);
+                    return error(1, "Expected an end of line character", tokens[i + 3]);
                 //addition syntax is correct
 
                 char *new_val = valueof(tokens[i]);
-                if (strcmp(new_val, "not declared") == 0) {
-                    printf("Error on line %d: %s is not declared before", tokens[i].line, tokens[i].value);
-                    return stop();
-                }
+                if (strcmp(new_val, "not declared") == 0)
+                    return error(2, NULL, tokens[i]);
 
                 //target accepted! tokens[i + 2] is where to add
                 char *old_val = get(tokens[i + 2].value);
-                if (strcmp(old_val, "not declared") == 0) {
-                    printf("Error on line %d: %s is not declared before", tokens[i].line, tokens[i].value);
-                    return stop();
-                }
-                char *sum = add(old_val, new_val);
-                set(tokens[i + 2].value, sum);
+                if (strcmp(old_val, "not declared") == 0)
+                    return error(2, NULL, tokens[i + 2]);
+
+                char *answer = add(old_val, new_val);
+                if (strcmp(answer, "digit limit exceeded") == 0)
+                    return error(4, NULL, tokens[i + 2]);
+
+                set(tokens[i + 2].value, answer);
 
                 i += 4; //add x to y. we were on x, skipped "to", "y" and "."
             } else if (strcmp(tokens[i].value, "sub") == 0) { //substraction
                 i++;
                 if (strcmp(tokens[i].type, "identifier") != 0 && strcmp(tokens[i].type, "integer") != 0)
-                    return error("Expected identifier or integer", tokens[i]);
+                    return error(1, "Expected identifier or integer", tokens[i]);
 
                 if (strcmp(tokens[i + 1].value, "from") != 0)
-                    return error("Expected 'from' keyword", tokens[i + 1]);
+                    return error(1, "Expected keyword 'from'", tokens[i + 1]);
 
                 if (strcmp(tokens[i + 2].type, "identifier") != 0)
-                    return error("Expected an identifier", tokens[i + 2]); // we have to assign to a variable
+                    return error(1, "Expected an identifier", tokens[i + 2]); // we have to assign to a variable
 
                 if (strcmp(tokens[i + 3].type, "eol") != 0)
-                    return error("Expected an end of line character", tokens[i + 3]);
+                    return error(1, "Expected an end of line character", tokens[i + 3]);
 
                 char *new_val = valueof(tokens[i]);
-                if (strcmp(new_val, "not declared") == 0) {
-                    printf("Error on line %d: %s is not declared before", tokens[i].line, tokens[i].value);
-                    return stop();
-                }
+                if (strcmp(new_val, "not declared") == 0)
+                    return error(2, NULL, tokens[i]);
+
 
                 //target accepted! tokens[i + 2] is where to add
                 char *old_val = get(tokens[i + 2].value);
-                if (strcmp(old_val, "not declared") == 0) {
-                    printf("Error on line %d: %s is not declared before", tokens[i].line, tokens[i].value);
-                    return stop();
-                }
+                if (strcmp(old_val, "not declared") == 0)
+                    return error(2, NULL, tokens[i + 2]);
+
                 char *answer = sub(old_val, new_val);
+                if (strcmp(answer, "digit limit exceeded") == 0)
+                    return error(4, NULL, tokens[i + 2]);
+
                 set(tokens[i + 2].value, answer);
 
                 i += 4; //"sub x from y." we were on x, skipped "from", "y" and "."
@@ -380,15 +401,14 @@ int main() {
                         printf(tokens[i].value);
                     } else if (strcmp(tokens[i].type, "identifier") == 0) {
                         char *value = valueof(tokens[i]);
-                        if (strcmp(value, "not declared") == 0) {
-                            printf("Error on line %d: %s is not declared before", tokens[i].line, tokens[i].value);
-                            return stop();
-                        }
+                        if (strcmp(value, "not declared") == 0)
+                            return error(2, NULL, tokens[i]);
+
                         printf(value);
                     } else if (strcmp(tokens[i].value, "newline") == 0) {
                         printf("\n");
                     } else //its not printable
-                        return error("Expected string, identifier or 'newline' keyword", tokens[i]);
+                        return error(1, "Expected string, identifier or 'newline' keyword", tokens[i]);
 
                     i++;
                     if (strcmp(tokens[i].type, "eol") == 0)
@@ -396,7 +416,7 @@ int main() {
 
                     //if we reached here, we will continue printing. check if theres a comma
                     if (strcmp(tokens[i].type, "comma") != 0)
-                        return error("Expected comma", tokens[i]);
+                        return error(1, "Expected comma", tokens[i]);
 
                     i++; //skipped comma
                 }
@@ -404,10 +424,10 @@ int main() {
             } else if (strcmp(tokens[i].value, "loop") == 0) {
                 i++;
                 if (strcmp(tokens[i].type, "identifier") != 0 && strcmp(tokens[i].type, "integer") != 0)
-                    return error("Expected identifier or integer", tokens[i]);
+                    return error(1, "Expected identifier or integer", tokens[i]);
 
                 if (strcmp(tokens[i + 1].value, "times") != 0)
-                    return error("Expected 'times' keyword", tokens[i + 1]);
+                    return error(1, "Expected keyword 'times'", tokens[i + 1]);
 
                 l_level++;
                 l_max[l_level] = atoi(valueof(tokens[i])); //should we allow loops more than 2147483647? I don't think so
@@ -417,7 +437,7 @@ int main() {
                     i++; // nothing to do with '['
                     l_block[l_level] = true;
                 } else if (strcmp(tokens[i].type, "keyword") != 0)
-                    return error("Expected open paranthesis or a keyword", tokens[i]);
+                    return error(1, "Expected open paranthesis or a keyword", tokens[i]);
 
                 l_starts[l_level] = i;
                 l_counts[l_level] = 0;
@@ -448,7 +468,7 @@ int main() {
             }
         } else {
             //every line of code must start with keyword.
-            return error("Keyword expected", tokens[i]);
+            return error(1, "Expected keyword", tokens[i]);
         }
     }
 
@@ -478,7 +498,7 @@ char *add(char *a, char *b) {
     } else if (a[0] == '-' && b[0] == '-')
         negative = 1; //if both are negative, answer will be negative
 
-    char result[MAX_DIGIT + 1], x[MAX_DIGIT + 1], y[MAX_DIGIT + 1], carry = '0';
+    char result[MAX_DIGIT + 2], x[MAX_DIGIT + 2], y[MAX_DIGIT + 2], carry = '0'; // +1 character for '-', +1 for '\0'
     int k;
     for (k = 0; k < strlen(a); ++k) {
         x[k] = *(a + k);
@@ -494,6 +514,7 @@ char *add(char *a, char *b) {
 
     int i = 0, x_ended = 0, y_ended = 0;
     for (;;) { // wtf? // while(1)
+
         if (x[i] > 57 || x[i] < 48) { //check if its not a number. x="123", x[3], x[4] is not number
             x[i] = 48; //assign 0
             x[i + 1] = '\0';
@@ -519,10 +540,15 @@ char *add(char *a, char *b) {
             carry = '1';
         }
         i++;
+        if (i > MAX_DIGIT)
+            return "digit limit exceeded";
     }
 
-    if (carry == '1')
+    if (carry == '1') {
         result[i++] = '1';
+        if (i > MAX_DIGIT)
+            return "digit limit exceeded";
+    }
 
     result[i] = '\0';
     strrev(result);
@@ -564,7 +590,7 @@ char *sub(char *a, char *b) {
         a = temp;
     }
 
-    char result[MAX_DIGIT + 1], x[MAX_DIGIT + 1], y[MAX_DIGIT + 1];
+    char result[MAX_DIGIT + 2], x[MAX_DIGIT + 2], y[MAX_DIGIT + 2];
     int k;
     for (k = 0; k < strlen(a); ++k) {
         x[k] = *(a + k);
@@ -579,7 +605,7 @@ char *sub(char *a, char *b) {
     strrev(y);
 
     //i is current digit number
-    int i = 0, x_ended = 0, y_ended = 0; //
+    int i = 0, x_ended = 0, y_ended = 0;
     while (1) {
         if (x[i] > 57 || x[i] < 48) {  //check if its not a number
             x[i] = 48; //assign 0, it wont effect calculations
@@ -612,6 +638,8 @@ char *sub(char *a, char *b) {
             result[i] = (char) (x[i] + 10 - y[i] + 48);
         }
         i++;
+        if (i > MAX_DIGIT)
+            return "digit limit exceeded";
     }
 
     result[i] = '\0';
@@ -658,13 +686,36 @@ char *shiftstr(char *str, int n) {
     }
 }
 
-int error(char *expect, struct token t) {
+int error(int type, char *info, struct token t) {
     system("cls");
-    printf("Error: Unexpected %s '%s'. %s on line %d", t.type, t.value, expect, t.line);
+    printf("Error on line %d column %d: ", t.line, t.column);
+    if (type == 1) // expected ...
+        printf("Unexpected %s '%s'. %s.", t.type, t.value, info);
+    else if (type == 2)
+        printf("'%s' is not declared before.", t.value);
+    else if (type == 3)
+        printf("'%s' is already declared before.", t.value);
+    else if (type == 4)
+        printf("Maximum value of an integer is exceeded.");
+    else if (type == 5)
+        printf("%s is not valid variable name. Only alphanumeric characters and underscores accepted.", t.value);
+    else if (type == 6)
+        printf("%s is not valid integer.", t.value); //--23
+    else if (type == 7)
+        printf("Maximum length of an identifier is exceeded.");
+    
+    printf("\nPress enter to exit...");
     fseek(stdin, 0, SEEK_END);
     getchar();
     return -1;
 }
+//int error(char *expect, struct token t) {
+//    system("cls");
+//    printf("Error: Unexpected %s '%s'. %s on line %d column %d", t.type, t.value, expect, t.line, t.column);
+//    fseek(stdin, 0, SEEK_END);
+//    getchar();
+//    return -1;
+//}
 
 int stop() {
     fseek(stdin, 0, SEEK_END);
