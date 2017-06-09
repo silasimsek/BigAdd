@@ -56,13 +56,6 @@ int main() {
     char filename[100];
     filename[0] = '\0';
 
-    //for testing purpose
-//    char *result;
-//    char *a = "-35";
-//    char *b = "100";
-//    result = add(a, b);
-//    printf("%s\n", result);
-
     while (1) { //loop until user enters a correct filename
         printf("Enter a file name: ");
         int is_filename_acceptable = 0;
@@ -94,7 +87,7 @@ int main() {
 
     FILE *source_code = fopen(filename, "r"); //lexical analysis output
     char lexeme[MAX_DIGIT + 1]; //temporary char array for each lexeme
-    struct token tokens[100];
+    struct token tokens[1000];
     int token_count = 0;
 
     int i = 0;
@@ -275,6 +268,10 @@ int main() {
                 if (strcmp(tokens[i].type, "identifier") != 0)
                     return error("Expected an identifier.", tokens[i]);
 
+                if (strcmp(tokens[i + 1].type, "eol") != 0)
+                    return error("Expected an end of line character", tokens[i + 1]);
+                //declaration syntax is correct
+
                 //get() will return "not declared" if its not declared
                 if ( strcmp(get(tokens[i].value), "not declared") != 0){
                     printf("Error on line %d: %s is already declared before", tokens[i].line, tokens[i].value);
@@ -284,8 +281,7 @@ int main() {
                 symbol_table[symbol_count].name = tokens[i].value;
                 symbol_table[symbol_count].value = "0";
                 symbol_count++;
-                if (strcmp(tokens[i + 1].type, "eol") != 0)
-                    return error("Expected an end of line character", tokens[i + 1]);
+
                 
                 i += 2; //nothing to do with eol
             } else if (strcmp(tokens[i].value, "move") == 0) { //assignment -> move y to x. or move 5 to x.
@@ -293,26 +289,27 @@ int main() {
                 if (strcmp(tokens[i].type, "identifier") != 0 && strcmp(tokens[i].type, "integer") != 0)
                     return error("Expected identifier or integer", tokens[i]);
 
-                char *new_val = valueof(tokens[i]);
-                if (strcmp(new_val, "not declared") == 0) {
-                    printf("Error on line %d: %s is not declared before", tokens[i], tokens[i].value);
-                    return stop();
-                }
-
-                // now we got what to assign, now check where to assign
                 if (strcmp(tokens[i + 1].value, "to") != 0)
                     return error("Expected 'to' keyword", tokens[i + 1]); // 'to' is required
 
                 if (strcmp(tokens[i + 2].type, "identifier") != 0)
                     return error("Expected an identifier", tokens[i]); // we can assign values to only identifiers
 
+                if (strcmp(tokens[i + 3].type, "eol") != 0)
+                    return error("Expected an end of line character", tokens[i + 3]);
+                //assignment syntax is correct
+
+                char *new_val = valueof(tokens[i]);
+                if (strcmp(new_val, "not declared") == 0) {
+                    printf("Error on line %d: %s is not declared before", tokens[i].line, tokens[i].value);
+                    return stop();
+                }
+
                 int found = set(tokens[i + 2].value, new_val); //returns 0 if symbol not found
                 if (!found) {
                     printf("Error on line %d: %s is not declared before", tokens[i + 2].line, tokens[i + 2].value);
                     return stop();
                 }
-                if (strcmp(tokens[i + 3].type, "eol") != 0)
-                    return error("Expected an end of line character", tokens[i + 3]);
 
                 i += 4; // move x to y. we were on x. skipped "to", "y" and "."
             } else if (strcmp(tokens[i].value, "add") == 0) { //addition
@@ -320,29 +317,30 @@ int main() {
                 if (strcmp(tokens[i].type, "identifier") != 0 && strcmp(tokens[i].type, "integer") != 0)
                     return error("Expected identifier or integer", tokens[i]);
 
-                char *new_val = valueof(tokens[i]);
-                if (strcmp(new_val, "not declared") == 0) {
-                    printf("Error on line %d: %s is not declared before", tokens[i], tokens[i].value);
-                    return stop();
-                }
-                //again we got what to add. lets find where to add
                 if (strcmp(tokens[i + 1].value, "to") != 0)
                     return error("Expected 'to' keyword", tokens[i + 1]);
 
                 if (strcmp(tokens[i + 2].type, "identifier") != 0)
                     return error("Expected an identifier", tokens[i + 2]); // we have to assign to a variable
 
+                if (strcmp(tokens[i + 3].type, "eol") != 0)
+                    return error("Expected an end of line character", tokens[i + 3]);
+                //addition syntax is correct
+
+                char *new_val = valueof(tokens[i]);
+                if (strcmp(new_val, "not declared") == 0) {
+                    printf("Error on line %d: %s is not declared before", tokens[i].line, tokens[i].value);
+                    return stop();
+                }
+
                 //target accepted! tokens[i + 2] is where to add
                 char *old_val = get(tokens[i + 2].value);
                 if (strcmp(old_val, "not declared") == 0) {
-                    printf("Error on line %d: %s is not declared before", tokens[i], tokens[i].value);
+                    printf("Error on line %d: %s is not declared before", tokens[i].line, tokens[i].value);
                     return stop();
                 }
                 char *sum = add(old_val, new_val);
                 set(tokens[i + 2].value, sum);
-
-                if (strcmp(tokens[i + 3].type, "eol") != 0)
-                    return error("Expected an end of line character", tokens[i + 3]);
 
                 i += 4; //add x to y. we were on x, skipped "to", "y" and "."
             } else if (strcmp(tokens[i].value, "sub") == 0) { //substraction
@@ -350,32 +348,31 @@ int main() {
                 if (strcmp(tokens[i].type, "identifier") != 0 && strcmp(tokens[i].type, "integer") != 0)
                     return error("Expected identifier or integer", tokens[i]);
 
-                char *new_val = valueof(tokens[i]);
-                if (strcmp(new_val, "not declared") == 0) {
-                    printf("Error on line %d: %s is not declared before", tokens[i], tokens[i].value);
-                    return stop();
-                }
-
-                //we got what to sub. lets find where to
                 if (strcmp(tokens[i + 1].value, "from") != 0)
                     return error("Expected 'from' keyword", tokens[i + 1]);
 
                 if (strcmp(tokens[i + 2].type, "identifier") != 0)
                     return error("Expected an identifier", tokens[i + 2]); // we have to assign to a variable
 
+                if (strcmp(tokens[i + 3].type, "eol") != 0)
+                    return error("Expected an end of line character", tokens[i + 3]);
+
+                char *new_val = valueof(tokens[i]);
+                if (strcmp(new_val, "not declared") == 0) {
+                    printf("Error on line %d: %s is not declared before", tokens[i].line, tokens[i].value);
+                    return stop();
+                }
+
                 //target accepted! tokens[i + 2] is where to add
                 char *old_val = get(tokens[i + 2].value);
                 if (strcmp(old_val, "not declared") == 0) {
-                    printf("Error on line %d: %s is not declared before", tokens[i], tokens[i].value);
+                    printf("Error on line %d: %s is not declared before", tokens[i].line, tokens[i].value);
                     return stop();
                 }
                 char *answer = sub(old_val, new_val);
                 set(tokens[i + 2].value, answer);
 
-                if (strcmp(tokens[i + 3].type, "eol") != 0)
-                    return error("Expected an end of line character", tokens[i + 3]);
-
-                i += 4; //sub x from y. we were on x, skipped "from", "y" and "."
+                i += 4; //"sub x from y." we were on x, skipped "from", "y" and "."
             } else if (strcmp(tokens[i].value, "out") == 0) { //output
                 i++;
                 while (1) { //print everything till end of line
@@ -384,7 +381,7 @@ int main() {
                     } else if (strcmp(tokens[i].type, "identifier") == 0) {
                         char *value = valueof(tokens[i]);
                         if (strcmp(value, "not declared") == 0) {
-                            printf("Error on line %d: %s is not declared before", tokens[i], tokens[i].value);
+                            printf("Error on line %d: %s is not declared before", tokens[i].line, tokens[i].value);
                             return stop();
                         }
                         printf(value);
@@ -409,12 +406,11 @@ int main() {
                 if (strcmp(tokens[i].type, "identifier") != 0 && strcmp(tokens[i].type, "integer") != 0)
                     return error("Expected identifier or integer", tokens[i]);
 
-                l_level++;
-                l_max[l_level] = atoi(valueof(tokens[i])); //should we allow loops more than 2147483647? I don't think so
-
-                //So,guyss what we are expecting after identf or int? of course---->'times' should be.
                 if (strcmp(tokens[i + 1].value, "times") != 0)
                     return error("Expected 'times' keyword", tokens[i + 1]);
+
+                l_level++;
+                l_max[l_level] = atoi(valueof(tokens[i])); //should we allow loops more than 2147483647? I don't think so
 
                 i += 2; // pass 'times' keyword
                 if (strcmp(tokens[i].value, "[") == 0){
@@ -444,12 +440,12 @@ int main() {
                     l_counts[l_level] = 0; // reset values just in case
                     l_max[l_level] = 0;
                     l_starts[l_level] = 0;
+                    l_block[l_level] = false;
                     l_level--;
                 } else {
                     i = l_starts[l_level]; // go back to start of that loop
                 }
             }
-
         } else {
             //every line of code must start with keyword.
             return error("Keyword expected", tokens[i]);
