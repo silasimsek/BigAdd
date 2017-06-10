@@ -1,0 +1,74 @@
+%YAML 1.2
+---
+# See http://www.sublimetext.com/docs/3/syntax.html
+name: BigAdd
+file_extensions:
+  - ba
+scope: text.plain
+contexts:
+  main:
+    # Strings begin and end with quotes, and use backslashes as an escape
+    # character
+    - match: '"'
+      scope: punctuation.definition.string.begin.example-c
+      push: double_quoted_string
+
+    - match: '\b(move|add|sub)\b'
+    # - match: '\b(move|add|sub|to|from|times)\b'
+      scope: keyword.control.example-c
+
+    #- match: '\b(to|from|times)\b'
+    #  scope: comment.block.c
+
+    - match: '\b(loop)\b'
+      scope: variable.function.c
+
+    - match: '\b(out)\b'
+      scope: variable.parameter.function.source.cs
+
+    - match: '\b(int)\b'
+      scope: storage.type.c
+
+    # Numbers
+    - match: '\b(-)?[0-9.]+\b'
+      scope: constant.numeric.example-c
+
+    - match: \[
+      push: brackets
+    - match: \]
+      scope: invalid.illegal.stray-bracket-end
+
+    - match: ^/\* =(\s*.*?)\s*= \*/$\n?
+      scope: comment.block.c
+    - match: '{'
+      scope: punctuation.definition.comment.c
+      push:
+        - meta_scope: comment.block.c
+        - match: '}'
+          scope: punctuation.definition.comment.c
+          pop: true
+
+  double_quoted_string:
+    - meta_scope: string.quoted.double.example-c
+    - match: '\\.'
+      scope: constant.character.escape.example-c
+    - match: '"'
+      scope: punctuation.definition.string.end.example-c
+      pop: true
+
+  block:
+    - match: '\['
+      scope: punctuation.section.block.begin.c
+      push:
+        - meta_scope: meta.block.c
+        - match: (?=^\s*#\s*(elif|else|endif)\b)
+          pop: true
+        - match: '\]'
+          scope: punctuation.section.block.end.c
+          pop: true
+        - include: statements
+
+  brackets:
+    - match: \]
+      pop: true
+    - include: main

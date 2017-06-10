@@ -1,0 +1,10 @@
+<snippet>
+	<description>Loop Block</description>
+	<content><![CDATA[
+loop ${1:var} times [
+	${2:\{Code Here\}}
+]
+]]></content>
+<tabTrigger>l</tabTrigger>
+<scope>source.ba</scope>
+</snippet>
