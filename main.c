@@ -37,6 +37,8 @@ char *add(char *a, char *b);
 
 char *sub(char *a, char *b);
 
+//shifts strings by n characters
+// n=-1 means shift left by one character, n=2 means shift right by two character
 char *shiftstr(char *str, int n);
 
 int error(int type, char *info, struct token t);
@@ -47,26 +49,36 @@ char *valueof(struct token target); //returns decimal value of a token. token ca
 char *get(char *target_name); //gets the value of and identifier
 int set(char *target_name, char *new_val); // sets the value of and identifier
 int compare(char *a, char *b); //compare two decimals, returns -1 if a<b, 0 if a=b, 1 if a>b
-int isSymbolExists(char *name);
 
 struct symbol symbol_table[100];
 int symbol_count = 0;
 
-int main() {
+int main(int argc, char *argv[]) {
     char keywords[10][10] = {"int", "move", "add", "to", "sub", "from", "loop", "times", "out", "newline"};
     int line_count = 1;
-    char filename[100];
-    filename[0] = '\0';
+    char *filename;
 
-    while (1) { //loop until user enters a correct filename
-        printf("Enter a file name: ");
-        int is_filename_acceptable = 0;
-        scanf(" %[^\n]s", filename); //to accept spaces in file name too
+    if (argc <= 1) {
+        filename = malloc(100 * sizeof(char));
+        *(filename) = '\0';
+    } else if (argc == 2)
+        filename = argv[1];
+    else {
+        printf("Too many arguments given. Maximum one argument expected.");
+        return stop();
+    }
+
+    while (true) { //loop until user enters a correct filename
+        if (argc <= 1) {
+            printf("Enter a file name: ");
+            scanf(" %[^\n]s", filename); //to accept spaces in file name too
+        }
+        bool filename_ok = false;
         if (strstr(filename, ".") != NULL) {
             strrev(filename);
             if (filename[0] == 'a' && filename[1] == 'b' && filename[2] == '.') {
                 strrev(filename);
-                is_filename_acceptable = 1;
+                filename_ok = true;
             } else {
                 printf("Error: Wrong extension!\n");
             }
@@ -76,9 +88,9 @@ int main() {
             filename[len + 1] = 'b';
             filename[len + 2] = 'a';
             filename[len + 3] = '\0';
-            is_filename_acceptable = 1;
+            filename_ok = 1;
         }
-        if (is_filename_acceptable) {
+        if (filename_ok) {
             if (access(filename, F_OK) == -1) {
                 printf("File doesn't exist\n");
             } else {
@@ -91,30 +103,29 @@ int main() {
     char lexeme[105]; //temporary char array for each lexeme
     struct token tokens[1000];
     int token_count = 0;
+    int eof_col = 0;//used for error reporting, not important
 
     int i = 0, col = 0, start_column = 0;
-    int is_reading_comment = 0, is_reading_string = 0, is_integer = 1;
+    bool is_reading_comment = false, is_reading_string = false, is_integer = true;
     while (1) {
         char c = (char) fgetc(source_code); //read one char from source
-        if (c == EOF) {
-            break;
-        }
 
         if (c == '{' && !is_reading_comment && !is_reading_string) { //don't count parenthesis in strings
             //fputs("{ is a parenthesis\n", output_file);
-            is_reading_comment = 1;
+            is_reading_comment = true;
             continue;
         } else if (c == '}' && is_reading_comment && !is_reading_string) {
             //fputs("} is a parenthesis\n", output_file);
-            is_reading_comment = 0;
+            is_reading_comment = false;
             continue;
         }
 
         col++;
-        if (i == 0){ //its first character of a lexeme
+        if (i == 0) { //its first character of a lexeme
             start_column = col;
         }
-        if (c == '\n'){
+        if (c == '\n') {
+            eof_col = col; //used for error reporting, not important
             col = 0;
             line_count++;
         }
@@ -137,7 +148,7 @@ int main() {
 
             if (!is_reading_string) {
                 if ((c >= 65 && c <= 91) || (c >= 97 && c <= 123) || (c >= 48 && c <= 57) || (c >= 44 && c <= 46)
-                    || c == 93 || c == 125 || c == 32 || c == 9 || c == 10 || c == 95) {
+                    || c == 93 || c == 125 || c == 32 || c == 9 || c == 10 || c == 95 || c == -1) {
                     //accept A-Z a-z 0-9 , - . [] {} space \t \n _ characters in source code
 
                     if (c == '[') {
@@ -156,15 +167,15 @@ int main() {
                         continue;
                     }
 
-                    if (c != ' ' && c != '.' && c != '\t' && c != '\n' && c != ',') {
+                    if (c != ' ' && c != '.' && c != '\t' && c != '\n' && c != ',' && c != EOF) {
                         if ((c < 48 && c != 45) || c > 57) // 45='-'
-                            is_integer = 0;
+                            is_integer = false;
 
                         lexeme[i++] = c; //still reading a lexeme
                     } else {
                         if (i != 0) { //check if lexeme is not null/empty
                             lexeme[i] = '\0';
-                            int is_keyword = 0;
+                            bool is_keyword = false;
                             for (int j = 0; j < 10; j++) { //for loop that checks if lexeme is a keyword
                                 if (strcmp(lexeme, keywords[j]) == 0) { //string equality
                                     tokens[token_count].type = "keyword";
@@ -172,7 +183,7 @@ int main() {
                                     tokens[token_count].line = line_count;
                                     tokens[token_count].column = start_column;
                                     token_count++;
-                                    is_keyword = 1;
+                                    is_keyword = true;
                                     break;
                                 }
                             }
@@ -207,7 +218,8 @@ int main() {
                             token_count++;
                         }
                         i = 0;
-                        is_integer = 1;
+                        is_integer = true; //reset
+
                     }
                 } else {
                     printf("Unexpected character: %c in line %d, column %d", c, line_count, col);
@@ -215,8 +227,16 @@ int main() {
                 }
             }
         }
+        if (c == EOF)
+            break;
     }
     fclose(source_code); //we are done with source file
+
+    tokens[token_count].type = "end of file"; //just for error catching
+    tokens[token_count].value = "EOF";
+    tokens[token_count].line = line_count;
+    tokens[token_count].column = eof_col;
+
     //now we got tokens[] array from lexical analyzer
 
     struct stack p_stack;
@@ -225,16 +245,21 @@ int main() {
     p_stack.top = -1;
     int open_count = 0, close_count = 0, last_open = 0;
 
-    //loop that validates code
-    for (int l = 0; l < token_count ; l++) {
-        if(strcmp(tokens[l].type, "identifier") == 0){
+    //initial validation of code
+    //it catches wrong integer representations and maximum integer value,
+    //  wrong identifier names,  parenthesis matching
+    for (int l = 0; l < token_count; l++) {
+        if (strcmp(tokens[l].type, "identifier") == 0) {
             if (strlen(tokens[l].value) > 20)
                 return error(7, NULL, tokens[l]); //max identifier name lenght exceeded
 
             if (strstr(tokens[l].value, "-") != NULL) //if identifier contains -
                 return error(5, NULL, tokens[l]);// not valid identifier
 
-        } else if(strcmp(tokens[l].type, "integer") == 0){
+            if (tokens[l].value[0] >= 48 && tokens[l].value[0] <= 57 ) //if first char is number
+                return error(9, NULL, tokens[l]);// not valid identifier
+
+        } else if (strcmp(tokens[l].type, "integer") == 0) {
             int digit_limit;
             if (strstr(tokens[l].value, "-") != NULL) //if its a negative integer
                 digit_limit = MAX_DIGIT + 1;
@@ -246,19 +271,19 @@ int main() {
 
             int dash_count = 0;
             char *temp = tokens[l].value;
-            while(strstr(temp, "-") != NULL) {
+            while (strstr(temp, "-") != NULL) {
                 dash_count++;
                 temp++;
             }
             if (dash_count > 1)
                 return error(6, NULL, tokens[l]); //not valid integer
 
-        } else if(strcmp(tokens[l].type, "parenthesis") == 0){
-            if (strcmp(tokens[l].value, "[") == 0){
-                push(&p_stack,'[');
+        } else if (strcmp(tokens[l].type, "parenthesis") == 0) {
+            if (strcmp(tokens[l].value, "[") == 0) {
+                push(&p_stack, '[');
                 open_count++;
                 last_open = l;
-            } else if (strcmp(tokens[l].value, "]") == 0){
+            } else if (strcmp(tokens[l].value, "]") == 0) {
                 char temp = pop(&p_stack);
                 if (temp != '[')
                     return error(1, "Expected open parenthesis before using a close parenthesis ", tokens[l]);
@@ -266,15 +291,13 @@ int main() {
             }
         }
     }
-    if (open_count != close_count){
-        printf("Error: Expected a close parenthesis before end of file. Last open parenthesis is on line %d"
-                ,tokens[last_open].line);
+    if (open_count != close_count) {
+        printf("Error: Expected a close parenthesis before end of file. Last open parenthesis is on line %d",
+               tokens[last_open].line);
         return stop();
     }
 
-//    int l_max[100] = {0}; //max loop iteration. how many times we need to loop?
     struct token l_vars[100];
-//    int l_counts[100] = {0}; //counter. how many times did we looped?
     int l_starts[100] = {0}; //loop starting points
     int l_level = -1; //loop level, -1 means we are not in loop
     bool l_block[100] = {false}; //'true' if loop has code block, 'false' if it has one line code
@@ -297,17 +320,17 @@ int main() {
 
                 if (strcmp(tokens[i + 1].type, "eol") != 0)
                     return error(1, "Expected an end of line character", tokens[i + 1]);
-                //declaration syntax is correct
 
+                //declaration syntax is correct
                 //get() will return "not declared" if its not declared
-                if ( strcmp(get(tokens[i].value), "not declared") != 0)
+                // so if it not returns "not declared" there is an error
+                if (strcmp(get(tokens[i].value), "not declared") != 0)
                     return error(3, NULL, tokens[i]);
 
                 symbol_table[symbol_count].name = tokens[i].value;
                 symbol_table[symbol_count].value = "0";
                 symbol_count++;
 
-                
                 i += 2; //nothing to do with eol
             } else if (strcmp(tokens[i].value, "move") == 0) { //assignment -> move y to x. or move 5 to x.
                 i++;
@@ -322,12 +345,11 @@ int main() {
 
                 if (strcmp(tokens[i + 3].type, "eol") != 0)
                     return error(1, "Expected an end of line character", tokens[i + 3]);
-                //assignment syntax is correct
 
+                //assignment syntax is correct
                 char *new_val = valueof(tokens[i]);
                 if (strcmp(new_val, "not declared") == 0)
                     return error(2, NULL, tokens[i]);
-
 
                 int found = set(tokens[i + 2].value, new_val); //returns 0 if symbol not found
                 if (!found)
@@ -383,7 +405,6 @@ int main() {
                 if (strcmp(new_val, "not declared") == 0)
                     return error(2, NULL, tokens[i]);
 
-
                 //target accepted! tokens[i + 2] is where to add
                 char *old_val = get(tokens[i + 2].value);
                 if (strcmp(old_val, "not declared") == 0)
@@ -398,7 +419,7 @@ int main() {
                 i += 4; //"sub x from y." we were on x, skipped "from", "y" and "."
             } else if (strcmp(tokens[i].value, "out") == 0) { //output
                 i++;
-                while (1) { //print everything till end of line
+                while (i < token_count) { //print everything till end of line
                     if (strcmp(tokens[i].type, "string") == 0) {
                         printf(tokens[i].value);
                     } else if (strcmp(tokens[i].type, "identifier") == 0) {
@@ -413,12 +434,13 @@ int main() {
                         return error(1, "Expected string, identifier or 'newline' keyword", tokens[i]);
 
                     i++;
+
                     if (strcmp(tokens[i].type, "eol") == 0)
                         break;
 
                     //if we reached here, we will continue printing. check if theres a comma
                     if (strcmp(tokens[i].type, "comma") != 0)
-                        return error(1, "Expected comma", tokens[i]);
+                        return error(1, "Expected comma or end of line character", tokens[i]);
 
                     i++; //skipped comma
                 }
@@ -432,30 +454,29 @@ int main() {
                     return error(1, "Expected keyword 'times'", tokens[i + 1]);
 
                 char *loop_count = valueof(tokens[i]);
-                if(compare(loop_count,"1") == -1)
+                if (compare(loop_count, "1") == -1)
                     return error(8, NULL, tokens[i]);
 
                 l_level++;
                 l_vars[l_level] = tokens[i];
-//                l_max[l_level] = atoi(valueof(tokens[i])); //should we allow loops more than 2147483647? I don't think so
 
                 i += 2; // pass 'times' keyword
-                if (strcmp(tokens[i].value, "[") == 0){
+                if (strcmp(tokens[i].value, "[") == 0) {
                     i++; // nothing to do with '['
                     l_block[l_level] = true;
                 } else if (strcmp(tokens[i].type, "keyword") != 0)
                     return error(1, "Expected open paranthesis or a keyword", tokens[i]);
 
                 l_starts[l_level] = i;
-//                l_counts[l_level] = 0;
                 continue;
             }
 
             //interpreted a line of code, lets check if it was in loop
-            if (l_level >= 0){
-                if (l_block[l_level]){ // we are in loop block
+            if (l_level >= 0) {
+                if (l_block[l_level]) { // we are in loop block
                     if (strcmp(tokens[i].value, "]") == 0) {
                         i++; //if its last iteration of loop, it will continue from next line
+                        //this is not used if we keep looping
                     } else {
                         // we are going to interpret atlease one line in current loop
                         continue; //lets go to the next line of code
@@ -465,15 +486,12 @@ int main() {
                 char *old_val = valueof(l_vars[l_level]);
                 char *new_val = sub(old_val, "1");
 
-                if (strcmp(l_vars[l_level].type, "identifier") == 0){
-                    set(l_vars[l_level].value,new_val);
+                if (strcmp(l_vars[l_level].type, "identifier") == 0) {
+                    set(l_vars[l_level].value, new_val);
                 } else {
                     l_vars[l_level].value = new_val;
                 }
-//                l_counts[l_level]++;
-                if (strcmp(new_val, "0") == 0){
-//                    l_counts[l_level] = 0; // reset values just in case
-//                    l_max[l_level] = 0;
+                if (strcmp(new_val, "0") == 0) {
                     l_starts[l_level] = 0;
                     l_block[l_level] = false;
                     l_level--;
@@ -493,17 +511,13 @@ int main() {
     return 0;
 }
 
-void printToken(struct token t) {
-    printf("%s is a %s\n", t.value, t.type);
-}
-
 char *add(char *a, char *b) {
     if (strcmp(a, "0") == 0)
         return b;
     else if (strcmp(b, "0") == 0)
         return a;
 
-    int negative = 0;
+    bool negative = false;
     if (a[0] == '-' && b[0] != '-') { // -3 + 5 == 5 - 3
         a = shiftstr(a, -1); //remove negative sign by shifting one char left
         return sub(b, a); //if a is negative, subtract a from b
@@ -511,35 +525,35 @@ char *add(char *a, char *b) {
         b = shiftstr(b, -1);
         return sub(a, b); //if b is negative, subtract b from a
     } else if (a[0] == '-' && b[0] == '-')
-        negative = 1; //if both are negative, answer will be negative
+        negative = true; //if both are negative, answer will be negative
 
-    char result[MAX_DIGIT + 2], x[MAX_DIGIT + 2], y[MAX_DIGIT + 2], carry = '0'; // +1 character for '-', +1 for '\0'
-    int k;
-    for (k = 0; k < strlen(a); ++k) {
-        x[k] = *(a + k);
+    char result[MAX_DIGIT + 2], x[MAX_DIGIT + 2], y[MAX_DIGIT + 2];  // +1 character for '-', +1 for '\0'
+
+    for (int k = strlen(a) - 1; k >= 0 ; k--) {
+        x[strlen(a) -1 - k] = *(a + k);
     }
-    x[k] = '\0';
-    for (k = 0; k < strlen(b); ++k) {
-        y[k] = *(b + k);
+    x[strlen(a)] = '\0';
+
+    for (int k = strlen(b) - 1; k >= 0; k--) {
+        y[strlen(b) -1 - k] = *(b + k);
     }
-    y[k] = '\0';
+    y[strlen(b)] = '\0';
 
-    strrev(x);
-    strrev(y);
-
-    int i = 0, x_ended = 0, y_ended = 0;
-    for (;;) { // wtf? // while(1)
+    char carry = '0';
+    int i = 0;
+    bool x_ended = false, y_ended = false;
+    for (;;) { // while(true)
 
         if (x[i] > 57 || x[i] < 48) { //check if its not a number. x="123", x[3], x[4] is not number
             x[i] = 48; //assign 0
             x[i + 1] = '\0';
-            x_ended = 1;
+            x_ended = true;
         }
 
         if (y[i] > 57 || y[i] < 48) { //check if its not a number again
             y[i] = 48;
             y[i + 1] = '\0';
-            y_ended = 1;
+            y_ended = true;
         }
         if (x_ended && y_ended)
             break;
@@ -581,7 +595,7 @@ char *sub(char *a, char *b) {
     if (strcmp(a, b) == 0)
         return "0";
 
-    int negative = 0;
+    bool negative = false;
     if (a[0] != '-' && b[0] == '-') { // +x - (-y) == x + y
         b = shiftstr(b, -1); // shift left by one character, we dont need '-'
         return add(a, b); //"sub - from +" is equal to "add + to +"
@@ -590,47 +604,47 @@ char *sub(char *a, char *b) {
         b[0] = '-';
         return add(a, b); //if b is negative, subtract b from a
     } else if (a[0] == '-' && b[0] == '-') {
-        if (strlen(a) > strlen(b))
-            negative = 1;
-        else if (strlen(a) == strlen(b) && strcmp(a, b) > 0) { //-5 - (-3) = -2
-            negative = 1;
+        if (strlen(a) > strlen(b)) {
+            negative = true;
+        } else if (strlen(a) == strlen(b) && strcmp(a, b) > 0) { //-5 - (-3) = -2
+            negative = true;
         }
-    } else if (strlen(b) > strlen(a)) //3 - 55 = -52
-        negative = 1;
-    else if (strlen(b) == strlen(a) && strcmp(b, a) > 0) { // 3 - 5 = -2
+    } else if (strlen(a) < strlen(b)) { //3 - 55 = -52
+        negative = true;
+    } else if (strlen(b) == strlen(a) && strcmp(b, a) > 0) { // 3 - 5 = -2
         //do 5 - 3 first, then add a negative sign
-        negative = 1;
+        negative = true;
         char *temp = b;
         b = a;
         a = temp;
     }
 
     char result[MAX_DIGIT + 2], x[MAX_DIGIT + 2], y[MAX_DIGIT + 2];
-    int k;
-    for (k = 0; k < strlen(a); ++k) {
-        x[k] = *(a + k);
-    }
-    x[k] = '\0';
-    for (k = 0; k < strlen(b); ++k) {
-        y[k] = *(b + k);
-    }
-    y[k] = '\0';
 
-    strrev(x);
-    strrev(y);
+
+    for (int k = strlen(a) - 1; k >= 0 ; k--) {
+        x[strlen(a) -1 - k] = *(a + k);
+    }
+    x[strlen(a)] = '\0';
+    for (int k = strlen(b) - 1; k >= 0; k--) {
+        y[strlen(b) -1 - k] = *(b + k);
+    }
+    y[strlen(b)] = '\0';
+
 
     //i is current digit number
-    int i = 0, x_ended = 0, y_ended = 0;
-    while (1) {
+    int i = 0;
+    bool x_ended = false, y_ended = false;
+    while (true) {
         if (x[i] > 57 || x[i] < 48) {  //check if its not a number
-            x[i] = 48; //assign 0, it wont effect calculations
+            x[i] = '0'; //assign 0, it wont effect calculations
             x[i + 1] = '\0';
-            x_ended = 1;
+            x_ended = true;
         }
         if (y[i] > 57 || y[i] < 48) { //check if its not a number
-            y[i] = 48;
+            y[i] = '0';
             y[i + 1] = '\0';
-            y_ended = 1;
+            y_ended = true;
         }
         if (x_ended && y_ended)
             break;
@@ -660,7 +674,7 @@ char *sub(char *a, char *b) {
     result[i] = '\0';
     strrev(result);
 
-    if (result[0] == '0' && strlen(result) > 1) {
+    if (result[0] == '0' && strlen(result) > 1) { // 0002, lets remove zeros
         int zero_count = 0;
         for (int j = 0; j < strlen(result); j++) { // count how many unwanted zeros at the beginning
             if (result[j] == '0')
@@ -698,11 +712,12 @@ char *shiftstr(char *str, int n) {
         *(new_str + strlen(str) + n) = '\0';
         free(str);
         return new_str;
-    }
+    } else
+        return str;
 }
 
 int error(int type, char *info, struct token t) {
-//    system("cls");
+    system("cls");
     printf("Error on line %d column %d: ", t.line, t.column);
     if (type == 1) // expected ...
         printf("Unexpected %s '%s'. %s.", t.type, t.value, info);
@@ -713,14 +728,16 @@ int error(int type, char *info, struct token t) {
     else if (type == 4)
         printf("Maximum value of an integer is exceeded.");
     else if (type == 5)
-        printf("%s is not valid variable name. Only alphanumeric characters and underscores accepted.", t.value);
+        printf("'%s' is not valid variable name. Only alphanumeric characters and underscores accepted.", t.value);
     else if (type == 6)
-        printf("%s is not valid integer.", t.value); //--23
+        printf("'%s' is not valid integer.", t.value); //--23
     else if (type == 7)
         printf("Maximum length of an identifier is exceeded.");
     else if (type == 8)
-        printf("Loop variable must be greater than zero.");
-    
+        printf("Loop variable '%s' must be greater than zero.", t.value);
+    else if (type == 9)
+        printf("'%s' is not valid variable name. It must start with an alphabetic character.", t.value);
+
     printf("\nPress enter to exit...");
     fseek(stdin, 0, SEEK_END);
     getchar();
@@ -771,7 +788,7 @@ int set(char *target_name, char *new_val) { //sets value of an identifier
 void push(struct stack *st, char c) {
     if (st->elements == NULL) { //lets allocate some space
         st->elements = malloc(INITIAL_MAX * sizeof(char));
-    } else if (st->top == st->max -1){ //its full, lets reallocate some more space
+    } else if (st->top == st->max - 1) { //its full, lets reallocate some more space
         st->max *= 2; //double the capacity
         char *more_elements = realloc(st->elements, st->max * sizeof(char));
         st->elements = more_elements;
@@ -781,7 +798,7 @@ void push(struct stack *st, char c) {
 }
 
 char pop(struct stack *st) {
-    if ((st->max / 2) > (st->top + 10)){ //more than half of it is empty
+    if ((st->max / 2) > (st->top + 10)) { //more than half of it is empty
         st->max /= 2;
         char *less_elements = malloc(st->max * sizeof(char));
         free(st->elements);
@@ -803,8 +820,8 @@ char pop(struct stack *st) {
  * returns  0 if a=b
  * returns  1 if a>b
  * */
-int compare(char *a, char *b){
-    if (strcmp(a,b) == 0)
+int compare(char *a, char *b) {
+    if (strcmp(a, b) == 0)
         return 0;
 
     if (a[0] == '-' && b[0] != '-') // -a  +b
@@ -842,14 +859,3 @@ int compare(char *a, char *b){
         return 1;
 
 }
-
-int isSymbolExists(char *target_name) {
-    for (int i = 0; i < symbol_count; ++i) {
-        if (strcmp(symbol_table[i].name, target_name)) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-
