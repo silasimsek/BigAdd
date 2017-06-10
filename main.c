@@ -46,6 +46,7 @@ int stop();
 char *valueof(struct token target); //returns decimal value of a token. token can be identifier or integer
 char *get(char *target_name); //gets the value of and identifier
 int set(char *target_name, char *new_val); // sets the value of and identifier
+int compare(char *a, char *b); //compare two decimals, returns -1 if a<b, 0 if a=b, 1 if a>b
 int isSymbolExists(char *name);
 
 struct symbol symbol_table[100];
@@ -271,12 +272,13 @@ int main() {
         return stop();
     }
 
-    int l_max[100] = {0}; //max loop. how many times we need to loop?
-    int l_counts[100] = {0}; //counter. how many times did we looped?
+//    int l_max[100] = {0}; //max loop iteration. how many times we need to loop?
+    struct token l_vars[100];
+//    int l_counts[100] = {0}; //counter. how many times did we looped?
     int l_starts[100] = {0}; //loop starting points
     int l_level = -1; //loop level, -1 means we are not in loop
     bool l_block[100] = {false}; //'true' if loop has code block, 'false' if it has one line code
-    // included <stdbool.h> for this
+    // included <stdbool.h> for this ^
     i = 0;
 
     //loop in tokens array. whole loop can be counted as parser
@@ -429,8 +431,13 @@ int main() {
                 if (strcmp(tokens[i + 1].value, "times") != 0)
                     return error(1, "Expected keyword 'times'", tokens[i + 1]);
 
+                char *loop_count = valueof(tokens[i]);
+                if(compare(loop_count,"1") == -1)
+                    return error(8, NULL, tokens[i]);
+
                 l_level++;
-                l_max[l_level] = atoi(valueof(tokens[i])); //should we allow loops more than 2147483647? I don't think so
+                l_vars[l_level] = tokens[i];
+//                l_max[l_level] = atoi(valueof(tokens[i])); //should we allow loops more than 2147483647? I don't think so
 
                 i += 2; // pass 'times' keyword
                 if (strcmp(tokens[i].value, "[") == 0){
@@ -440,7 +447,7 @@ int main() {
                     return error(1, "Expected open paranthesis or a keyword", tokens[i]);
 
                 l_starts[l_level] = i;
-                l_counts[l_level] = 0;
+//                l_counts[l_level] = 0;
                 continue;
             }
 
@@ -455,10 +462,18 @@ int main() {
                     }
                 }
 
-                l_counts[l_level]++;
-                if (l_counts[l_level] == l_max[l_level]){
-                    l_counts[l_level] = 0; // reset values just in case
-                    l_max[l_level] = 0;
+                char *old_val = valueof(l_vars[l_level]);
+                char *new_val = sub(old_val, "1");
+
+                if (strcmp(l_vars[l_level].type, "identifier") == 0){
+                    set(l_vars[l_level].value,new_val);
+                } else {
+                    l_vars[l_level].value = new_val;
+                }
+//                l_counts[l_level]++;
+                if (strcmp(new_val, "0") == 0){
+//                    l_counts[l_level] = 0; // reset values just in case
+//                    l_max[l_level] = 0;
                     l_starts[l_level] = 0;
                     l_block[l_level] = false;
                     l_level--;
@@ -687,7 +702,7 @@ char *shiftstr(char *str, int n) {
 }
 
 int error(int type, char *info, struct token t) {
-    system("cls");
+//    system("cls");
     printf("Error on line %d column %d: ", t.line, t.column);
     if (type == 1) // expected ...
         printf("Unexpected %s '%s'. %s.", t.type, t.value, info);
@@ -703,6 +718,8 @@ int error(int type, char *info, struct token t) {
         printf("%s is not valid integer.", t.value); //--23
     else if (type == 7)
         printf("Maximum length of an identifier is exceeded.");
+    else if (type == 8)
+        printf("Loop variable must be greater than zero.");
     
     printf("\nPress enter to exit...");
     fseek(stdin, 0, SEEK_END);
@@ -779,6 +796,51 @@ char pop(struct stack *st) {
         st->top--;
         return c;
     }
+}
+
+/* compare(): compares two decimal numbers
+ * returns -1 if a<b
+ * returns  0 if a=b
+ * returns  1 if a>b
+ * */
+int compare(char *a, char *b){
+    if (strcmp(a,b) == 0)
+        return 0;
+
+    if (a[0] == '-' && b[0] != '-') // -a  +b
+        return -1;
+
+    if (a[0] != '-' && b[0] == '-') // +a  -b
+        return 1;
+
+    if (a[0] == '-' && b[0] == '-') { // -a  -b
+        if (strlen(a) == strlen(b)) { // -aaa -bbb
+            if (strcmp(a, b) > 0)   //-5  -4
+                return -1;
+            else                    //-4  -5
+                return 1;
+        }
+
+        if (strlen(a) > strlen(b))  // -10  -5
+            return -1;
+        else
+            return 1;
+
+    }
+
+    //if we reached here, we know both is positive
+    if (strlen(a) == strlen(b)) { //+aaa  +bbb
+        if (strcmp(a, b) < 0) // +4  +5
+            return -1;
+        else                  // +5  +4
+            return 1;
+    }
+
+    if (strlen(a) < strlen(b))  //+5  +10
+        return -1;
+    else
+        return 1;
+
 }
 
 int isSymbolExists(char *target_name) {
