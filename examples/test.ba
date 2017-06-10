@@ -1,0 +1,9 @@
+int x.
+int y.
+move -5 to y.
+add 3 to y.
+{add y to x.
+sub 17 from x.
+add -15 to x.
+add x to y.}
+out "x = ", x, newline, "y = ", y. 

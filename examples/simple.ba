@@ -1,0 +1,4 @@
+int size.
+move 10001 to size.
+add 101 to size.
+out size.

@@ -1,0 +1,21 @@
+int size.
+int sum.
+int i.
+int j.
+move 1000 to size.
+move 100000000000000000000000000000000000000 to j.
+loop size times
+[ 
+	out "i=" , i , " ".
+	add 1 to i.
+	loop 100 times 
+	[
+		sub 10 from j.
+		add size to sum.
+	]
+	out "j=" , j , newline.
+	loop 10 times out "******".
+	out newline.
+	
+]
+out newline , "The sum is: " , sum.

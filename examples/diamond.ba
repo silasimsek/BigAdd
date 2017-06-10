@@ -1,0 +1,34 @@
+{this program prints a diamond}
+int const_size. int size. int temp. {declarations} 
+
+move 23 to size.
+move size to const_size.
+out newline.
+loop size times [
+	move size to temp.
+	loop temp times out " ".
+
+	move const_size to temp.
+	add 1 to temp.
+	sub size from temp.
+	loop temp times [
+		loop 2 times out "*".
+	]
+	out newline.
+]
+
+move const_size to size.
+sub 1 from size.
+
+loop size times [
+	move const_size to temp.
+	add 1 to temp.
+	sub size from temp.	
+	loop temp times out " ".
+	
+	move size to temp.
+	loop temp times [
+		loop 2 times out "*".
+	]
+	out newline.
+]
