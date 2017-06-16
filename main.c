@@ -57,6 +57,7 @@ int main(int argc, char *argv[]) {
     char keywords[10][10] = {"int", "move", "add", "to", "sub", "from", "loop", "times", "out", "newline"};
     int line_count = 1;
     char *filename;
+    bool arg_handled = false;
 
     if (argc <= 1) {
         filename = malloc(100 * sizeof(char));
@@ -64,14 +65,17 @@ int main(int argc, char *argv[]) {
     } else if (argc == 2)
         filename = argv[1];
     else {
+        //program working path always passed as first argument
         printf("Too many arguments given. Maximum one argument expected.");
         return stop();
     }
 
     while (true) { //loop until user enters a correct filename
-        if (argc <= 1) {
+        if (argc <= 1 || arg_handled) {
             printf("Enter a file name: ");
             scanf(" %[^\n]s", filename); //to accept spaces in file name too
+        } else {
+            arg_handled = true;
         }
         bool filename_ok = false;
         if (strstr(filename, ".") != NULL) {
@@ -338,10 +342,11 @@ int main(int argc, char *argv[]) {
                     return error(1, "Expected identifier or integer", tokens[i]);
 
                 if (strcmp(tokens[i + 1].value, "to") != 0)
-                    return error(1, "Expected keyword 'to'", tokens[i + 1]); // 'to' is required
+                    return error(1, "Expected keyword 'to'", tokens[i + 1]);
 
                 if (strcmp(tokens[i + 2].type, "identifier") != 0)
-                    return error(1, "Expected an identifier", tokens[i]); // we can assign values to only identifiers
+                    return error(1, "Expected an identifier", tokens[i]);
+                    //we can assign values to only identifiers
 
                 if (strcmp(tokens[i + 3].type, "eol") != 0)
                     return error(1, "Expected an end of line character", tokens[i + 3]);
@@ -365,7 +370,8 @@ int main(int argc, char *argv[]) {
                     return error(1, "Expected keyword 'to'", tokens[i + 1]);
 
                 if (strcmp(tokens[i + 2].type, "identifier") != 0)
-                    return error(1, "Expected an identifier", tokens[i + 2]); // we have to assign to a variable
+                    return error(1, "Expected an identifier", tokens[i + 2]);
+                    // we have to assign to a variable
 
                 if (strcmp(tokens[i + 3].type, "eol") != 0)
                     return error(1, "Expected an end of line character", tokens[i + 3]);
@@ -396,7 +402,8 @@ int main(int argc, char *argv[]) {
                     return error(1, "Expected keyword 'from'", tokens[i + 1]);
 
                 if (strcmp(tokens[i + 2].type, "identifier") != 0)
-                    return error(1, "Expected an identifier", tokens[i + 2]); // we have to assign to a variable
+                    return error(1, "Expected an identifier", tokens[i + 2]);
+                    // we have to assign to a variable
 
                 if (strcmp(tokens[i + 3].type, "eol") != 0)
                     return error(1, "Expected an end of line character", tokens[i + 3]);
@@ -743,13 +750,6 @@ int error(int type, char *info, struct token t) {
     getchar();
     return -1;
 }
-//int error(char *expect, struct token t) {
-//    system("cls");
-//    printf("Error: Unexpected %s '%s'. %s on line %d column %d", t.type, t.value, expect, t.line, t.column);
-//    fseek(stdin, 0, SEEK_END);
-//    getchar();
-//    return -1;
-//}
 
 int stop() {
     fseek(stdin, 0, SEEK_END);

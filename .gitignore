@@ -48,7 +48,6 @@ Temporary Items
 
 # Project files
 cmake-build-debug
-cmake-build-debug/
+cmake-build-release
 CMakeLists.txt
-.idea/
 .idea
